@@ -522,19 +522,40 @@ const loadHidden = (): boolean => {
   try { return localStorage.getItem(HIDDEN_KEY) === '1' } catch { return false }
 }
 
-// ───────── 拖动 hook (支持移动端防越界与智能吸边) ─────────
-function useDrag(pos: Pos, setPos: (p: Pos) => void, isMobile: boolean) {
-  const drag = useRef({ active: false, sx: 0, sy: 0, ox: 0, oy: 0, moved: false })
-  const onDown = (e: React.PointerEvent<HTMLElement>) => {
-    const target = e.currentTarget
-    try { target.setPointerCapture(e.pointerId) } catch { /* ignore */ }
-    drag.current = { active: true, sx: e.clientX, sy: e.clientY, ox: pos.right, oy: pos.bottom, moved: false }
-  }
-  const onMove = (e: React.PointerEvent<HTMLElement>) => {
+// ───────── 拖动 hook (屏幕刷新率 rAF 对齐 + 0延迟跟随 + 智能吸边) ─────────
+function useDrag(
+  pos: Pos,
+  setPos: (p: Pos) => void,
+  isMobile: boolean,
+  widgetRef: { current: HTMLDivElement | null }
+) {
+  const drag = useRef({
+    active: false,
+    sx: 0,
+    sy: 0,
+    ox: 0,
+    oy: 0,
+    moved: false,
+    curRight: pos.right,
+    curBottom: pos.bottom,
+    rafId: 0,
+    latestClientX: 0,
+    latestClientY: 0,
+  })
+
+  useEffect(() => {
+    if (!drag.current.active) {
+      drag.current.curRight = pos.right
+      drag.current.curBottom = pos.bottom
+    }
+  }, [pos.right, pos.bottom])
+
+  const updatePosition = () => {
+    drag.current.rafId = 0
     if (!drag.current.active) return
-    const dx = e.clientX - drag.current.sx
-    const dy = e.clientY - drag.current.sy
-    if (Math.abs(dx) + Math.abs(dy) > (isMobile ? 10 : 4)) drag.current.moved = true
+
+    const dx = drag.current.latestClientX - drag.current.sx
+    const dy = drag.current.latestClientY - drag.current.sy
 
     let newRight = drag.current.ox - dx
     let newBottom = drag.current.oy - dy
@@ -547,24 +568,114 @@ function useDrag(pos: Pos, setPos: (p: Pos) => void, isMobile: boolean) {
       newRight = Math.max(8, Math.min(maxR, newRight))
       newBottom = Math.max(10, Math.min(maxB, newBottom))
     }
-    setPos({ right: newRight, bottom: newBottom })
-  }
-  const onUp = (e: React.PointerEvent<HTMLElement>) => {
-    if (!drag.current.active) return
-    drag.current.active = false
-    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId) } catch { /* ignore */ }
 
-    // 移动端释放时智能吸边，避免遮挡中央文本
-    if (isMobile && typeof window !== 'undefined' && drag.current.moved) {
-      const mid = window.innerWidth / 2
-      if (pos.right > mid - 30) {
-        setPos({ right: Math.max(8, window.innerWidth - 72), bottom: pos.bottom })
-      } else {
-        setPos({ right: 12, bottom: pos.bottom })
+    drag.current.curRight = newRight
+    drag.current.curBottom = newBottom
+
+    // 屏幕刷新率 (V-Sync) 直接驱动 DOM，0ms 延迟跟手，跳过 React 虚拟 DOM 漫长 diff 与重渲染
+    if (widgetRef.current) {
+      widgetRef.current.style.right = `${newRight}px`
+      widgetRef.current.style.bottom = `${newBottom}px`
+
+      const bubbleEl = widgetRef.current.querySelector('.dsh-maid-bubble')
+      if (bubbleEl && typeof window !== 'undefined') {
+        const isLeft = newRight > window.innerWidth / 2
+        bubbleEl.classList.toggle('dsh-maid-bubble--dock-left', isLeft)
       }
     }
   }
-  return { onDown, onMove, onUp, wasDrag: () => drag.current.moved }
+
+  const onWindowPointerMove = (e: PointerEvent) => {
+    if (!drag.current.active) return
+    const dx = e.clientX - drag.current.sx
+    const dy = e.clientY - drag.current.sy
+    if (Math.abs(dx) + Math.abs(dy) > (isMobile ? 8 : 3)) {
+      drag.current.moved = true
+    }
+
+    drag.current.latestClientX = e.clientX
+    drag.current.latestClientY = e.clientY
+
+    // 对齐显示器刷新率 (60/120/144Hz)，杜绝多余开销和事件堆积导致的“瞬移”
+    if (!drag.current.rafId) {
+      drag.current.rafId = requestAnimationFrame(updatePosition)
+    }
+  }
+
+  const onWindowPointerUp = () => {
+    if (!drag.current.active) return
+    drag.current.active = false
+
+    if (drag.current.rafId) {
+      cancelAnimationFrame(drag.current.rafId)
+      drag.current.rafId = 0
+    }
+
+    window.removeEventListener('pointermove', onWindowPointerMove)
+    window.removeEventListener('pointerup', onWindowPointerUp)
+    window.removeEventListener('pointercancel', onWindowPointerUp)
+
+    if (widgetRef.current) {
+      widgetRef.current.classList.remove('dsh-maid-widget--dragging')
+      widgetRef.current.style.transition = ''
+    }
+
+    let finalRight = drag.current.curRight
+    let finalBottom = drag.current.curBottom
+
+    // 移动端释放时智能吸边
+    if (isMobile && typeof window !== 'undefined' && drag.current.moved) {
+      const mid = window.innerWidth / 2
+      if (finalRight > mid - 30) {
+        finalRight = Math.max(8, window.innerWidth - 72)
+      } else {
+        finalRight = 12
+      }
+    }
+
+    // 拖动完全结束后统一持久化与更新 React 状态
+    setPos({ right: finalRight, bottom: finalBottom })
+  }
+
+  const onDown = (e: React.PointerEvent<HTMLElement>) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return
+    e.preventDefault()
+
+    drag.current = {
+      active: true,
+      sx: e.clientX,
+      sy: e.clientY,
+      ox: pos.right,
+      oy: pos.bottom,
+      moved: false,
+      curRight: pos.right,
+      curBottom: pos.bottom,
+      rafId: 0,
+      latestClientX: e.clientX,
+      latestClientY: e.clientY,
+    }
+
+    if (widgetRef.current) {
+      widgetRef.current.classList.add('dsh-maid-widget--dragging')
+      widgetRef.current.style.transition = 'none'
+    }
+
+    // 全局 window 监听，彻底避免高速甩动鼠标时光标脱离造成脱手瞬移
+    window.addEventListener('pointermove', onWindowPointerMove, { passive: true })
+    window.addEventListener('pointerup', onWindowPointerUp)
+    window.addEventListener('pointercancel', onWindowPointerUp)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (drag.current.rafId) cancelAnimationFrame(drag.current.rafId)
+      window.removeEventListener('pointermove', onWindowPointerMove)
+      window.removeEventListener('pointerup', onWindowPointerUp)
+      window.removeEventListener('pointercancel', onWindowPointerUp)
+    }
+  }, [])
+
+  return { onDown, wasDrag: () => drag.current.moved }
 }
 
 function parseThinking(raw: string): { isSummary: boolean; text: string } {
@@ -716,6 +827,13 @@ const CSS = `
   user-select: none;
   -webkit-user-select: none;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+  transition: right 0.22s cubic-bezier(0.2, 0.8, 0.25, 1), bottom 0.22s cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+.dsh-maid-widget.dsh-maid-widget--dragging {
+  transition: none !important;
+}
+.dsh-maid-widget.dsh-maid-widget--dragging .dsh-maid-sprite {
+  cursor: grabbing !important;
 }
 .dsh-maid-bubble {
   position: absolute;
@@ -852,6 +970,9 @@ const CSS = `
   animation: dsh-aether-float 3.2s ease-in-out infinite;
   will-change: transform;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
 }
 .dsh-maid-sprite:active { animation: dsh-aether-jelly 360ms ease-out 1 !important; }
 
@@ -2448,7 +2569,8 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     maidBus.setHidden(h)
     setHidden(h)
   }
-  const drag = useDrag(pos, setPos, isMobile)
+  const widgetRef = useRef<HTMLDivElement | null>(null)
+  const drag = useDrag(pos, setPos, isMobile, widgetRef)
 
   const applyState = (s: MaidState): void => {
     if (!s) return
@@ -3325,7 +3447,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     const bubbleClass = `dsh-maid-bubble${isDockLeft ? ' dsh-maid-bubble--dock-left' : ''}`
 
     return h(React.Fragment, null,
-      h('div', { className: 'dsh-maid-widget', style: widgetStyle },
+      h('div', { className: 'dsh-maid-widget', ref: widgetRef, style: widgetStyle },
         h('div', {
           className: bubbleClass,
           key: 'bubble',
@@ -3391,9 +3513,6 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
             alt: 'maid pet',
             draggable: false,
             onPointerDown: drag.onDown,
-            onPointerMove: drag.onMove,
-            onPointerUp: drag.onUp,
-            onPointerCancel: drag.onUp,
             onClick: () => { void onClickSprite() },
             onContextMenu,
           })
