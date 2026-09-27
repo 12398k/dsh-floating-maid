@@ -13,10 +13,11 @@ import { existsSync, readFileSync } from 'node:fs'
 import { extname, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { pushManager, WebPushManager } from './push.js'
 
 type Ctx = any
 
-export const name = '@dsh-external/dsh-floating-maid'
+export const name = 'whale-girl-pet'
 export const inject = ['webServer', 'timer', 'sessionProjections', 'sessions']
 
 export type Phase = 'idle' | 'waiting' | 'thinking' | 'review' | 'tool' | 'done' | 'failed'
@@ -302,13 +303,13 @@ const gStore = globalThis.__DSH_MAID_STORE__ || {
       isMain: true,
       status: 'idle',
       phase: 'idle',
-      line: '就绪 ♪',
+      line: '就绪',
       thinking: '',
       steps: [],
       metrics: { ...defaultMetrics },
     }],
     phase: 'idle',
-    line: '就绪 ♪',
+    line: '就绪',
     tool: null,
     sessionId: null,
     lastUpdate: Date.now(),
@@ -333,7 +334,7 @@ function getOrCreateSessionData(sid: string, title?: string): SessionData {
       sessionId: sid,
       title: title || '新会话',
       phase: 'idle',
-      line: '就绪 ♪',
+      line: '就绪',
       tool: null,
       userInput: null,
       thinking: '',
@@ -358,7 +359,7 @@ const mainAgentView: AgentView = state.agents.find(a => a.id === 'main') || {
   isMain: true,
   status: 'idle',
   phase: 'idle',
-  line: '就绪 ♪',
+  line: '就绪',
   thinking: '',
   steps: [],
   metrics: { ...defaultMetrics },
@@ -450,6 +451,7 @@ const sessionStatsMap = new Map<string, {
   lastPromptTokens: number
   openStep: { startTime: number; firstTokenTime: number | null } | null
   openCalls: Map<string, number>
+  turnStartTime: number
 }>()
 
 function getOrCreateStats(sid: string) {
@@ -476,6 +478,7 @@ function getOrCreateStats(sid: string) {
       lastPromptTokens: 0,
       openStep: null,
       openCalls: new Map(),
+      turnStartTime: 0,
     })
   }
   return sessionStatsMap.get(sid)!
@@ -528,6 +531,7 @@ function isSystemNotificationPrompt(p?: string | null): boolean {
   if (lower.startsWith('[system message]')) return true
   if (lower.startsWith('[system-reminder]')) return true
   if (lower.startsWith('[mnemon]')) return true
+  if (lower.startsWith('mnemon runtime memory')) return true
   return false
 }
 
@@ -687,14 +691,14 @@ function hydrateSessionHistory(sid: string, sessionObj?: any): SessionData {
           reconstructedSteps.push({
             id: 'turn_end_' + evTime,
             type: 'done',
-            title: '本轮任务已顺利完成 ♪',
+            title: '本轮任务已顺利完成',
             status: 'done',
             startTime: evTime,
             endTime: evTime,
             durationMs: 0,
           })
           sData.phase = 'done'
-          sData.line = '任务已顺利完成 ♪'
+          sData.line = '任务已顺利完成'
         } else if (reason) {
           const failTitle = extractFailureReason(ev, s)
           reconstructedSteps.push({
@@ -807,7 +811,7 @@ function syncActiveSessions(): void {
             isMain: false,
             status: s.closed || s.settled ? 'done' : 'running',
             phase: s.closed || s.settled ? 'done' : 'waiting',
-            line: s.closed || s.settled ? '任务已完成 ♪' : '子代理执行中…',
+            line: s.closed || s.settled ? '任务已完成' : '子代理执行中…',
             thinking: '',
             steps: [{
               id: 'init_' + sId,
@@ -1089,16 +1093,60 @@ let activeThinkingStepId: string | null = null
 
 const sseClients = new Set<ServerResponse>()
 
+function getCleanStateForClient(): any {
+  return {
+    ...state,
+    sessions: Array.isArray(state.sessions) ? state.sessions.map((s: any) => ({
+      id: s.id,
+      title: s.title,
+      phase: s.phase,
+      status: s.status,
+      lastUpdate: s.lastUpdate,
+      stepsCount: s.stepsCount || (s.steps ? s.steps.length : 0),
+      userInput: typeof s.userInput === 'string' ? s.userInput.slice(0, 100) : null,
+    })) : [],
+    steps: Array.isArray(state.steps) ? state.steps.slice(-10).map((st: any) => ({
+      ...st,
+      title: typeof st.title === 'string' ? (st.title.length > 200 ? st.title.slice(0, 200) + '...' : st.title) : '',
+    })) : [],
+    agents: Array.isArray(state.agents) ? state.agents.map((ag: any) => ({
+      ...ag,
+      steps: Array.isArray(ag.steps) ? ag.steps.slice(-10).map((st: any) => ({
+        ...st,
+        title: typeof st.title === 'string' ? (st.title.length > 200 ? st.title.slice(0, 200) + '...' : st.title) : '',
+      })) : [],
+    })) : [],
+  }
+}
+
+let broadcastTimer: any = null
+let broadcastPending = false
+
 const broadcastState = (): void => {
   if (sseClients.size === 0) return
-  const data = `data: ${JSON.stringify(state)}\n\n`
-  for (const client of sseClients) {
-    try {
-      client.write(data)
-    } catch {
-      sseClients.delete(client)
+  if (broadcastTimer) {
+    broadcastPending = true
+    return
+  }
+  const doSend = () => {
+    broadcastPending = false
+    const clean = getCleanStateForClient()
+    const data = `data: ${JSON.stringify(clean)}\n\n`
+    for (const client of sseClients) {
+      try {
+        client.write(data)
+      } catch {
+        sseClients.delete(client)
+      }
     }
   }
+  doSend()
+  broadcastTimer = setTimeout(() => {
+    broadcastTimer = null
+    if (broadcastPending) {
+      doSend()
+    }
+  }, 100)
 }
 
 const sessionTools = new Map<string, Set<string>>()
@@ -1160,6 +1208,7 @@ function cleanUserPrompt(raw: string): string {
     '[MNEMON]',
     '<system-reminder>',
     'MNEMON RUNTIME MEMORY PROTOCOL',
+    'MNEMON RUNTIME MEMORY SNAPSHOT',
     'SEMANTICS AND PRIORITY',
   ]
   let minIdx = -1
@@ -1257,6 +1306,79 @@ function findTargetAgent(sessionId: string, sessionObj?: any): AgentView {
   return main
 }
 
+function formatDuration(ms: number): string {
+  if (ms <= 0) return ''
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  const min = Math.floor(ms / 60000)
+  const sec = Math.round((ms % 60000) / 1000)
+  return sec > 0 ? `${min}分${sec}秒` : `${min}分钟`
+}
+
+let lastPushTime = 0
+async function triggerTurnCompletionPush(sid: string, reason: string | undefined, sessionObj?: any, failReason?: string): Promise<void> {
+  try {
+    const config = pushManager.getConfig()
+    if (!config.enabled) return
+    const isCompleted = reason === 'completed'
+    if (isCompleted && !config.notifyOnDone) return
+    if (!isCompleted && !config.notifyOnFailed) return
+
+    const now = Date.now()
+    if (now - lastPushTime < 3000) return
+    lastPushTime = now
+
+    const sData = rootSessionMap.get(sid)
+    const prompt = sData?.userInput || state.userInput || ''
+    const sessionTitle = sData?.title && sData.title !== '新会话' ? sData.title : ''
+    const titleText = isCompleted
+      ? (sessionTitle ? `任务完成 · ${sessionTitle.slice(0, 16)}` : 'DSH 任务已完成')
+      : (sessionTitle ? `任务中断 · ${sessionTitle.slice(0, 16)}` : 'DSH 任务执行中断')
+
+    let bodyText = ''
+    if (isCompleted) {
+      const stats = getOrCreateStats(sid)
+      const turnDurationMs = stats.turnStartTime > 0 ? Math.max(1, now - stats.turnStartTime) : 0
+      const durationStr = formatDuration(turnDurationMs)
+      const targetAgent = state.agents.find(a => a.isMain)
+      const stepsCount = stats.turnSteps || targetAgent?.steps?.length || 0
+
+      const metaParts: string[] = []
+      if (stepsCount > 0) metaParts.push(`${stepsCount} 步`)
+      if (durationStr) metaParts.push(`耗时 ${durationStr}`)
+      const metaStr = metaParts.length > 0 ? `（${metaParts.join('，')}）` : ''
+
+      if (prompt) {
+        bodyText = `「${prompt.slice(0, 50)}${prompt.length > 50 ? '…' : ''}」\n执行完毕${metaStr}`
+      } else {
+        bodyText = `本轮任务已顺利执行完毕${metaStr}。点击即可回到会话。`
+      }
+    } else {
+      bodyText = failReason ? `中断原因: ${failReason.slice(0, 80)}` : '任务执行遇到异常中断，点击查看详情。'
+    }
+
+    // DSH 前端是纯 SPA、无会话路径路由（/sessions/:id 会 404）；
+    // 推送统一落首页，携带 sessionId 由 SW 预选 maid 会话。
+    const sessionUrl = '/'
+
+    await pushManager.sendNotification({
+      title: titleText,
+      body: bodyText,
+      icon: '/api/maid/maid.png',
+      badge: '/api/maid/maid.png',
+      data: {
+        url: sessionUrl,
+        sessionId: sid,
+        timestamp: now,
+      },
+      tag: `dsh-turn-${sid || 'main'}`,
+      renotify: true,
+    })
+  } catch (err) {
+    console.error('[dsh-floating-maid] 触发 Web Push 通知失败:', err)
+  }
+}
+
 const projectEvent = (sessionId: string, event: any, sessionObj?: any): void => {
   if (!event || typeof event.type !== 'string') return
   const sid = String(sessionId || 'global')
@@ -1316,6 +1438,7 @@ const projectEvent = (sessionId: string, event: any, sessionObj?: any): void => 
         }
 
         stats.turns += 1
+        stats.turnStartTime = eventTime || Date.now()
         stats.turnSteps = 0
         stats.turnUncachedInput = 0
         stats.turnCacheRead = 0
@@ -1656,7 +1779,7 @@ const projectEvent = (sessionId: string, event: any, sessionObj?: any): void => 
         if (subAgent) {
           subAgent.status = hasError ? 'failed' : 'done'
           subAgent.phase = hasError ? 'failed' : 'done'
-          subAgent.line = hasError ? '子任务执行失败' : '子任务已完成 ♪'
+          subAgent.line = hasError ? '子任务执行失败' : '子任务已完成'
         }
 
         if (tools && tools.size > 0) {
@@ -1707,13 +1830,14 @@ const projectEvent = (sessionId: string, event: any, sessionObj?: any): void => 
           addOrUpdateAgentStep(targetAgent, {
             id: 'turn_end_' + Date.now(),
             type: 'done',
-            title: '本轮任务已顺利完成 ♪',
+            title: '本轮任务已顺利完成',
             status: 'done',
             startTime: eventTime,
             endTime: eventTime,
             durationMs: 0,
           })
-          setState({ phase: 'done', line: '完成啦 ♪', sessionId: sid, tool: null, steps: state.steps, metrics: state.metrics })
+          setState({ phase: 'done', line: '完成啦', sessionId: sid, tool: null, steps: state.steps, metrics: state.metrics })
+          void triggerTurnCompletionPush(sid, 'completed', sessionObj)
         } else {
           const failTitle = extractFailureReason(event, sessionObj)
           addOrUpdateAgentStep(targetAgent, {
@@ -1726,6 +1850,7 @@ const projectEvent = (sessionId: string, event: any, sessionObj?: any): void => 
             durationMs: 0,
           })
           setState({ phase: 'failed', line: failTitle, sessionId: sid, tool: null, steps: state.steps, metrics: state.metrics })
+          void triggerTurnCompletionPush(sid, reason, sessionObj, failTitle)
         }
       } else {
         // 子代理 turn 结束
@@ -1745,7 +1870,7 @@ const projectEvent = (sessionId: string, event: any, sessionObj?: any): void => 
             durationMs: 0,
           })
         } else {
-          targetAgent.line = '子代理任务已顺利完成 ♪'
+          targetAgent.line = '子代理任务已顺利完成'
         }
         for (const s of targetAgent.steps) {
           if (s.status === 'running') {
@@ -1901,7 +2026,7 @@ export function apply(ctx: Ctx): void {
   const watchdog = ctx.setInterval(() => {
     try { updateTelemetry() } catch {}
     if (!isTurnActive && state.phase !== 'idle' && Date.now() - state.lastUpdate > 45_000) {
-      setState({ phase: 'idle', line: '就绪 ♪', tool: null, thinking: '' })
+      setState({ phase: 'idle', line: '就绪', tool: null, thinking: '' })
     }
   }, 5_000)
 
@@ -1916,7 +2041,7 @@ export function apply(ctx: Ctx): void {
         'Connection': 'keep-alive',
         'Access-Control-Allow-Origin': '*',
       })
-      res.write(`data: ${JSON.stringify(state)}\n\n`)
+      res.write(`data: ${JSON.stringify(getCleanStateForClient())}\n\n`)
       sseClients.add(res)
       _req.on('close', () => {
         sseClients.delete(res)
@@ -1929,7 +2054,7 @@ export function apply(ctx: Ctx): void {
     path: '/api/maid/state',
     handler: (_req: IncomingMessage, res: ServerResponse) => {
       try { updateTelemetry() } catch {}
-      json(res, 200, state)
+      json(res, 200, getCleanStateForClient())
     },
   }
 
@@ -2072,6 +2197,124 @@ export function apply(ctx: Ctx): void {
     },
   }
 
+  // ───────── Web Push 离线推送系统路由 ─────────
+  const routeSw = {
+    kind: 'exact' as const,
+    path: '/api/maid/sw.js',
+    handler: (_req: IncomingMessage, res: ServerResponse) => {
+      res.writeHead(200, {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Service-Worker-Allowed': '/',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Access-Control-Allow-Origin': '*',
+      })
+      res.end(WebPushManager.getServiceWorkerScript())
+    },
+  }
+
+  const routePushPublicKey = {
+    kind: 'exact' as const,
+    path: '/api/maid/webpush/public-key',
+    handler: (_req: IncomingMessage, res: ServerResponse) => {
+      json(res, 200, { ok: true, publicKey: pushManager.getPublicKey() })
+    },
+  }
+
+  const routePushStatus = {
+    kind: 'exact' as const,
+    path: '/api/maid/webpush/status',
+    handler: (_req: IncomingMessage, res: ServerResponse) => {
+      json(res, 200, {
+        ok: true,
+        publicKey: pushManager.getPublicKey(),
+        config: pushManager.getConfig(),
+        subscriptions: pushManager.getSubscriptions(),
+      })
+    },
+  }
+
+  const routePushSubscribe = {
+    kind: 'exact' as const,
+    path: '/api/maid/webpush/subscribe',
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      try {
+        const bodyStr = await readBody(req)
+        const body = JSON.parse(bodyStr || '{}')
+        const ua = String(req.headers['user-agent'] || '')
+        const result = pushManager.addSubscription(body.subscription, {
+          deviceName: body.deviceName,
+          userAgent: ua,
+          origin: body.origin,
+        })
+        json(res, 200, result)
+      } catch (err: any) {
+        json(res, 400, { ok: false, error: String(err?.message || err) })
+      }
+    },
+  }
+
+  const routePushUnsubscribe = {
+    kind: 'exact' as const,
+    path: '/api/maid/webpush/unsubscribe',
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      try {
+        const bodyStr = await readBody(req)
+        const body = JSON.parse(bodyStr || '{}')
+        const result = pushManager.removeSubscription({
+          endpoint: body.endpoint,
+          id: body.id,
+        })
+        json(res, 200, result)
+      } catch (err: any) {
+        json(res, 400, { ok: false, error: String(err?.message || err) })
+      }
+    },
+  }
+
+  const routePushConfig = {
+    kind: 'exact' as const,
+    path: '/api/maid/webpush/config',
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      try {
+        const bodyStr = await readBody(req)
+        const body = JSON.parse(bodyStr || '{}')
+        const cfg = pushManager.updateConfig(body)
+        json(res, 200, { ok: true, config: cfg })
+      } catch (err: any) {
+        json(res, 400, { ok: false, error: String(err?.message || err) })
+      }
+    },
+  }
+
+  const routePushTest = {
+    kind: 'exact' as const,
+    path: '/api/maid/webpush/test',
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      try {
+        const bodyStr = await readBody(req)
+        const body = JSON.parse(bodyStr || '{}')
+        const result = await pushManager.sendNotification({
+          title: body.title || '女仆测试推送',
+          body: body.body || 'Web Push 推送通道运作正常！当任务在后台完成时，您将收到类似通知。',
+          data: { url: '/', timestamp: Date.now() },
+          renotify: true,
+        })
+        json(res, 200, { ok: true, ...result })
+      } catch (err: any) {
+        json(res, 500, { ok: false, error: String(err?.message || err) })
+      }
+    },
+  }
+
+  const routePushClear = {
+    kind: 'exact' as const,
+    path: '/api/maid/webpush/clear',
+    handler: (_req: IncomingMessage, res: ServerResponse) => {
+      const result = pushManager.clearAllSubscriptions()
+      json(res, 200, result)
+    },
+  }
+
   const r0 = ctx.webServer.register(routeStream)
   const r1 = ctx.webServer.register(routeState)
   const r2 = ctx.webServer.register(routePat)
@@ -2082,6 +2325,14 @@ export function apply(ctx: Ctx): void {
   const r7 = ctx.webServer.register(routeMaid)
   const r8 = ctx.webServer.register(routeSend)
   const r9 = ctx.webServer.register(routeSelectSession)
+  const rSw = ctx.webServer.register(routeSw)
+  const rPushKey = ctx.webServer.register(routePushPublicKey)
+  const rPushStatus = ctx.webServer.register(routePushStatus)
+  const rPushSub = ctx.webServer.register(routePushSubscribe)
+  const rPushUnsub = ctx.webServer.register(routePushUnsubscribe)
+  const rPushCfg = ctx.webServer.register(routePushConfig)
+  const rPushTest = ctx.webServer.register(routePushTest)
+  const rPushClr = ctx.webServer.register(routePushClear)
 
   ctx.effect(() => () => {
     dEvent?.()
@@ -2092,6 +2343,7 @@ export function apply(ctx: Ctx): void {
     }
     sseClients.clear()
     r0?.(); r1?.(); r2?.(); r3?.(); r4?.(); r5?.(); r6?.(); r7?.(); r8?.(); r9?.()
+    rSw?.(); rPushKey?.(); rPushStatus?.(); rPushSub?.(); rPushUnsub?.(); rPushCfg?.(); rPushTest?.(); rPushClr?.()
   }, 'maid: host lifecycle dispose')
 
   void watchdog

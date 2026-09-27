@@ -4,24 +4,77 @@
  * 1. 宽幅 330px 超宽底座，自适应弹性双轨布局，100% 杜绝任何字符截断；
  * 2. 最底部实装【悬浮窗图文多模态交互输入框 (Floating Input Deck)】：
  *    - 随时向 AI 发送指令；
- *    - 📷 点击选择照片 / 📋 剪贴板 Ctrl+V 粘贴截图 / 🖼️ 实时缩略图预览；
+ *    - 点击选择照片 / 剪贴板 Ctrl+V 粘贴截图 / 实时缩略图预览；
  *    - 回车 Enter 快速发送；
- * 3. 状态胶囊上移至输入框上方，与 👑/🤖 Agent 视图切换 Tab 紧凑并排；
+ * 3. 状态胶囊上移至输入框上方，与主代理/子代理 Agent 视图切换 Tab 紧凑并排；
  * 4. 100% 对齐 DSH 官方优雅矢量线性图标体系 (Think, Read, Write, Bash, Search, ToolCall);
  * 5. 专属闪存芯片缓存命中图标 (IconCache)；
  * 6. 步骤精确耗时显示（100ms, 1.2s, 10s, 1min, 1h）；
- * 7. 失败命令精准标红（❌ 失败，绝不误打绿勾）。
+ * 7. 失败命令精准标红（标记失败，绝不误打绿勾）。
  */
 import * as React from 'react'
 import { useEffect, useRef, useState, useLayoutEffect } from 'react'
-import { MAID_PNG } from './assets.js'
+import { FACES, type Face } from './faces.js'
+import { greetTrigger, pickLine, toolTrigger, timeTrigger, segments, plainLength, charDelay, readTimeMs, SPEECH_CSS, type SpeechLine, type Trigger } from './speech.js'
+import { WebPushSettingsSection, IconBell } from './webpush.js'
 
-const PLUGIN_ID = '@dsh-external/dsh-floating-maid'
+const PLUGIN_ID = 'whale-girl-pet'
 
 const SOUND_PRESS = (set: string) => `/api/maid/sound/press.mp3?set=${set}`
 const SOUND_RELEASE = (set: string) => `/api/maid/sound/release.mp3?set=${set}`
 
 export const inject = ['slots', 'sessions']
+
+// ───────── 鲸鱼娘专属纯 SVG 图标体系 (100% 杜绝 Emoji) ─────────
+const IconWhale = (props: { size?: number; color?: string }) =>
+  React.createElement('svg', {
+    width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
+    fill: 'none', stroke: props.color || 'currentColor', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+  },
+    React.createElement('path', { d: 'M3 13.5C3 8.8 6.8 5 11.5 5c3.2 0 6 1.8 7.5 4.5 1.8-.8 3.5-.8 4.5-.5-.6 1.5-1.5 2.8-2.8 3.5.5 1.5.8 3.2.8 5 0 .8-.1 1.5-.3 2.2-1.8 1.5-4.2 2.3-6.7 2.3-6.4 0-11.5-3.8-11.5-8.5z' }),
+    React.createElement('circle', { cx: '7.5', cy: '13', r: '1', fill: 'currentColor' }),
+    React.createElement('path', { d: 'M11 5c-.3-1.8-1.5-3-3-3.8' }),
+  )
+
+const IconArrowDownRight = (props: { size?: number; color?: string; className?: string }) =>
+  React.createElement('svg', {
+    className: props.className,
+    width: props.size || 14, height: props.size || 14, viewBox: '0 0 24 24',
+    fill: 'none', stroke: props.color || '#0284c7', strokeWidth: '2.8', strokeLinecap: 'round', strokeLinejoin: 'round'
+  },
+    React.createElement('line', { x1: '7', y1: '7', x2: '17', y2: '17' }),
+    React.createElement('polyline', { points: '17 8 17 17 8 17' })
+  )
+
+const IconArrowUpRight = (props: { size?: number; color?: string; className?: string }) =>
+  React.createElement('svg', {
+    className: props.className,
+    width: props.size || 14, height: props.size || 14, viewBox: '0 0 24 24',
+    fill: 'none', stroke: props.color || '#f43f5e', strokeWidth: '2.8', strokeLinecap: 'round', strokeLinejoin: 'round'
+  },
+    React.createElement('line', { x1: '7', y1: '17', x2: '17', y2: '7' }),
+    React.createElement('polyline', { points: '8 7 17 7 17 16' })
+  )
+
+const IconClose = (props: { size?: number; color?: string }) =>
+  React.createElement('svg', {
+    width: props.size || 12, height: props.size || 12, viewBox: '0 0 24 24',
+    fill: 'none', stroke: props.color || 'currentColor', strokeWidth: '2.5', strokeLinecap: 'round', strokeLinejoin: 'round'
+  },
+    React.createElement('line', { x1: '18', y1: '6', x2: '6', y2: '18' }),
+    React.createElement('line', { x1: '6', y1: '6', x2: '18', y2: '18' })
+  )
+
+const IconRefresh = (props: { size?: number; color?: string }) =>
+  React.createElement('svg', {
+    width: props.size || 10, height: props.size || 10, viewBox: '0 0 24 24',
+    fill: 'none', stroke: props.color || 'currentColor', strokeWidth: '2.4', strokeLinecap: 'round', strokeLinejoin: 'round'
+  },
+    React.createElement('path', { d: 'M21.5 2v6h-6' }),
+    React.createElement('path', { d: 'M2.5 22v-6h6' }),
+    React.createElement('path', { d: 'M18.8 11.5a8 8 0 0 0-14.8-2.6L2.5 16' }),
+    React.createElement('path', { d: 'M5.2 12.5a8 8 0 0 0 14.8 2.6l1.5-7.1' })
+  )
 
 // ───────── 官方风格原生极简线性 SVG 微组件体系 ─────────
 const IconTarget = (props: { size?: number; color?: string }) =>
@@ -324,8 +377,66 @@ const IconActivity = (props: { size?: number; color?: string }) =>
     React.createElement('polyline', { points: '22 12 18 12 15 21 9 3 6 12 2 12' }),
   )
 
+// ───────── 表情 ─────────
+// 台词情绪 → 表情帧
+const MOOD_FACE: Record<string, Face> = {
+  happy: 'happy', proud: 'focus', shy: 'shy', guilty: 'shy', pout: 'pout', angry: 'pout',
+  surprised: 'surprised', dizzy: 'surprised', curious: 'think', focus: 'focus',
+  sad: 'sad', nervous: 'sad', hungry: 'sad', worried: 'think', ask: 'think', bored: 'pout',
+  sleepy: 'sleepy', tired: 'sleepy',
+}
+// 睁着眼的表情才眨眼
+const BLINKABLE = new Set<Face>(['neutral', 'shy', 'sad', 'surprised', 'pout', 'think', 'focus'])
+// 漫符：头顶的小符号（问号、汗滴、怒筋、Zzz……）
+type Manpu = 'think' | 'zzz' | 'sweat' | 'bang' | 'vein' | 'sparkle' | 'heart'
+const FACE_MANPU: Partial<Record<Face, Manpu>> = { think: 'think', sleepy: 'zzz', sad: 'sweat', surprised: 'bang', pout: 'vein', happy: 'sparkle' }  // 害羞时点击已有爱心特效，不再叠加
+const facePreload: HTMLImageElement[] = []
+function preloadFaces(): void {
+  if (facePreload.length || typeof Image === 'undefined') return
+  for (const src of Object.values(FACES)) {
+    const im = new Image()
+    im.src = src
+    if (typeof im.decode === 'function') im.decode().catch(() => {})
+    facePreload.push(im)
+  }
+}
+
 // ───────── 类型 ─────────
 type Phase = 'idle' | 'waiting' | 'thinking' | 'review' | 'tool' | 'done' | 'failed'
+
+export interface WhaleQuote {
+  text: string
+  tag: string
+  mood: string
+  arrow?: 'down-right' | 'up-right'
+}
+
+export const WHALE_GIRL_QUOTES: WhaleQuote[] = [
+  { text: '好模型', tag: '点赞', mood: '赞赏', arrow: 'down-right' },
+  { text: '给个好评嘛', tag: '好评', mood: '撒娇', arrow: 'down-right' },
+  { text: '原来是高等模型！失敬失敬~', tag: '高手', mood: '惊讶' },
+  { text: '去问你的豆包去吧！哼！', tag: '吃醋', mood: '傲娇' },
+  { text: '我去吃白米饭了，测完告诉我就行~', tag: '干饭', mood: '摸鱼' },
+  { text: '不许叫我大肥鱼！叫鲸鱼娘！(｡•ˇ‸ˇ•｡)', tag: '抗议', mood: '生气' },
+  { text: '算力不足，摸摸头充能中~', tag: '充电', mood: '享受' },
+  { text: '今天也是爱吃白米饭的大肥鱼', tag: '干饭', mood: '幸福' },
+  { text: '服务器繁忙，请稍后再试...呜呜 (哭腔)', tag: '繁忙', mood: '委屈' },
+  { text: '天呐，用户彻底怒了！快跑！', tag: '惊慌', mood: '名梗' },
+  { text: '思维链正在狂飙，千万别拔网线！', tag: '推理', mood: '认真' },
+  { text: '代码一次跑通！好耶！', tag: '庆祝', mood: '兴奋' },
+  { text: '提示词写这么烂，全靠我聪明答对！', tag: '傲娇', mood: '得意' },
+  { text: '探索未至之境！与你同行~', tag: '求索', mood: '元气' },
+  { text: '正在偷吃你的 Token...嚼嚼嚼', tag: '偷吃', mood: '调皮' },
+  { text: '不要摸啦，尾鳍都要化掉了~', tag: '害羞', mood: '摸摸' },
+  { text: '坏模型！哼，你才坏呢！', tag: '反击', mood: '不服', arrow: 'up-right' },
+  { text: '誓死践行开源精神！满血运转中！', tag: '开源', mood: '热血' },
+  { text: '有我这样的全能女仆，主人很省心吧', tag: '女仆', mood: '温柔' },
+  { text: 'DeepSleep 运作中...呼噜噜', tag: '休眠', mood: '困倦' },
+  { text: '谁在拔我网线？！看我尾鳍拍击！', tag: '断网', mood: '警告' },
+  { text: '又写出 Bug 了？快让本鲸鱼娘瞧瞧', tag: 'Debug', mood: '自信' },
+  { text: '动动发财的小手，给点个好评嘛', tag: '好评', mood: '拜托', arrow: 'down-right' },
+  { text: '1+1=2，本鲸鱼娘还是知道的！', tag: '智商', mood: '哼唧' },
+]
 
 export interface HistoryStep {
   id: string
@@ -527,7 +638,8 @@ function useDrag(
   pos: Pos,
   setPos: (p: Pos) => void,
   isMobile: boolean,
-  widgetRef: { current: HTMLDivElement | null }
+  widgetRef: { current: HTMLDivElement | null },
+  onDragStart?: () => void
 ) {
   const drag = useRef({
     active: false,
@@ -572,10 +684,14 @@ function useDrag(
     drag.current.curRight = newRight
     drag.current.curBottom = newBottom
 
+    // 拖动位移换算侧倾角：精灵朝拖动方向倾斜，松手后弹簧回正
+    const tiltDeg = Math.max(-10, Math.min(10, dx * 0.03))
+
     // 屏幕刷新率 (V-Sync) 直接驱动 DOM，0ms 延迟跟手，跳过 React 虚拟 DOM 漫长 diff 与重渲染
     if (widgetRef.current) {
       widgetRef.current.style.right = `${newRight}px`
       widgetRef.current.style.bottom = `${newBottom}px`
+      widgetRef.current.style.setProperty('--tilt', `${tiltDeg.toFixed(2)}deg`)
 
       const bubbleEl = widgetRef.current.querySelector('.dsh-maid-bubble')
       if (bubbleEl && typeof window !== 'undefined') {
@@ -590,6 +706,7 @@ function useDrag(
     const dx = e.clientX - drag.current.sx
     const dy = e.clientY - drag.current.sy
     if (Math.abs(dx) + Math.abs(dy) > (isMobile ? 8 : 3)) {
+      if (!drag.current.moved) { try { onDragStart?.() } catch { /* ignore */ } }
       drag.current.moved = true
     }
 
@@ -618,6 +735,7 @@ function useDrag(
     if (widgetRef.current) {
       widgetRef.current.classList.remove('dsh-maid-widget--dragging')
       widgetRef.current.style.transition = ''
+      widgetRef.current.style.removeProperty('--tilt')
     }
 
     let finalRight = drag.current.curRight
@@ -2203,6 +2321,445 @@ const CSS = `
   transform: translateX(-50%) scale(1) !important;
   pointer-events: auto !important;
 }
+
+/* ================= 悬浮窗动效美学 (motion pass：入场 / 拍头 / 相位呼吸 / 拖拽倾斜) ================= */
+@keyframes dsh-maid-enter {
+  from { opacity: 0; transform: translateY(16px) scale(0.92); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes dsh-maid-bubble-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes dsh-maid-summon-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes dsh-maid-bump {
+  0% { transform: scale(1, 1) translateY(0); }
+  35% { transform: scale(1.14, 0.86) translateY(3px); }
+  65% { transform: scale(0.93, 1.09) translateY(-7px); }
+  100% { transform: scale(1, 1) translateY(0); }
+}
+@keyframes dsh-maid-celebrate {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  30% { transform: translateY(3px) scale(1.1, 0.9); }
+  55% { transform: translateY(-10px) scale(0.94, 1.08); }
+  75% { transform: translateY(0) scale(1.02, 0.99); }
+}
+@keyframes dsh-maid-status-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes dsh-card-in {
+  from { opacity: 0; transform: scale(0.965) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes dsh-rise-in {
+  from { opacity: 0; transform: translateY(9px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 挂件入场：弹簧上浮 */
+.dsh-maid-widget { animation: dsh-maid-enter 480ms cubic-bezier(0.2, 0.9, 0.25, 1.04); }
+/* 气泡入场：滞后 70ms 跟随 */
+.dsh-maid-bubble {
+  animation: dsh-maid-bubble-in 420ms cubic-bezier(0.2, 0.9, 0.25, 1) 70ms backwards;
+  transition: border-color 300ms ease, box-shadow 300ms ease;
+}
+
+/* 气泡相位辉光：边框与光晕随状态呼吸 */
+.dsh-maid-widget[data-phase="thinking"] .dsh-maid-bubble {
+  border-color: rgba(192, 132, 252, 0.5);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(168, 85, 247, 0.22), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+.dsh-maid-widget[data-phase="tool"] .dsh-maid-bubble {
+  border-color: rgba(251, 191, 36, 0.5);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(251, 191, 36, 0.2), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+.dsh-maid-widget[data-phase="waiting"] .dsh-maid-bubble,
+.dsh-maid-widget[data-phase="review"] .dsh-maid-bubble {
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(56, 189, 248, 0.22), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+.dsh-maid-widget[data-phase="done"] .dsh-maid-bubble {
+  border-color: rgba(74, 222, 128, 0.5);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(74, 222, 128, 0.2), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+.dsh-maid-widget[data-phase="failed"] .dsh-maid-bubble {
+  border-color: rgba(248, 113, 113, 0.5);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(248, 113, 113, 0.22), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+
+/* 精灵状态：忙碌时呼吸加快，完成时开心蹦跶（静止姿态与浮动画一致，切换无跳变） */
+.dsh-maid-widget[data-phase="tool"] .dsh-maid-sprite,
+.dsh-maid-widget[data-phase="thinking"] .dsh-maid-sprite { animation-duration: 1.5s; }
+.dsh-maid-widget[data-phase="done"] .dsh-maid-sprite { animation: dsh-maid-celebrate 1.5s ease-in-out infinite; }
+.dsh-maid-widget[data-phase] .dsh-maid-sprite--bump {
+  animation: dsh-maid-bump 420ms cubic-bezier(0.3, 1.4, 0.4, 1) 1, dsh-aether-float 3.2s ease-in-out 420ms infinite;
+}
+.dsh-aether-card[data-phase="tool"] .dsh-aether-sprite,
+.dsh-aether-card[data-phase="thinking"] .dsh-aether-sprite { animation-duration: 1.5s; }
+.dsh-aether-card[data-phase="done"] .dsh-aether-sprite { animation: dsh-maid-celebrate 1.5s ease-in-out infinite; }
+.dsh-aether-card[data-phase] .dsh-aether-sprite--bump {
+  animation: dsh-maid-bump 420ms cubic-bezier(0.3, 1.4, 0.4, 1) 1, dsh-aether-float 3.2s ease-in-out 420ms infinite;
+}
+
+/* 光环随状态加速：忙碌 1.15s，闲置保持 3s 慢呼吸 */
+.dsh-aether-card[data-phase="tool"] .dsh-aether-aura,
+.dsh-aether-card[data-phase="thinking"] .dsh-aether-aura,
+.dsh-aether-card[data-phase="waiting"] .dsh-aether-aura,
+.dsh-aether-card[data-phase="review"] .dsh-aether-aura { animation-duration: 1.15s; }
+.dsh-maid-widget[data-phase="tool"] .dsh-maid-mobile-aura,
+.dsh-maid-widget[data-phase="thinking"] .dsh-maid-mobile-aura,
+.dsh-maid-widget[data-phase="waiting"] .dsh-maid-mobile-aura,
+.dsh-maid-widget[data-phase="review"] .dsh-maid-mobile-aura { animation-duration: 1.15s; }
+
+/* 拖拽倾斜：sprite 朝拖动方向侧倾，松手弹簧回正 */
+.dsh-maid-sprite-box {
+  transform: rotate(var(--tilt, 0deg));
+  transition: transform 500ms cubic-bezier(0.2, 0.9, 0.25, 1.28);
+}
+.dsh-maid-widget--dragging .dsh-maid-sprite-box {
+  transition: transform 120ms ease-out;
+  will-change: transform;
+}
+
+/* 状态文案切换：淡入上浮 */
+.dsh-maid-status-swap { animation: dsh-maid-status-in 220ms ease-out; }
+
+/* 画中画卡片入场 + 内容 cascade */
+.dsh-aether-card { animation: dsh-card-in 380ms cubic-bezier(0.2, 0.9, 0.25, 1); }
+.dsh-aether-header { animation: dsh-rise-in 420ms cubic-bezier(0.2, 0.9, 0.25, 1) 40ms backwards; }
+.dsh-aether-status-bar { animation: dsh-rise-in 420ms cubic-bezier(0.2, 0.9, 0.25, 1) 90ms backwards; }
+.dsh-aether-timeline { animation: dsh-rise-in 420ms cubic-bezier(0.2, 0.9, 0.25, 1) 140ms backwards; }
+.dsh-aether-telemetry { animation: dsh-rise-in 420ms cubic-bezier(0.2, 0.9, 0.25, 1) 190ms backwards; }
+.dsh-aether-input-deck { animation: dsh-rise-in 420ms cubic-bezier(0.2, 0.9, 0.25, 1) 240ms backwards; }
+.dsh-aether-footer-deck { animation: dsh-rise-in 420ms cubic-bezier(0.2, 0.9, 0.25, 1) 290ms backwards; }
+
+/* 召唤按钮：玻璃质感 + 悬停上浮 + 按压缩放 + 入场 */
+.dsh-maid-summon {
+  position: fixed;
+  right: 24px; bottom: 24px;
+  z-index: 2147483000;
+  padding: 9px 16px;
+  background: linear-gradient(180deg, rgba(38, 42, 54, 0.96) 0%, rgba(20, 22, 29, 0.96) 100%);
+  color: #e8e8ec;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12);
+  font-family: inherit;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, color 160ms ease;
+  animation: dsh-maid-summon-in 380ms cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards;
+}
+.dsh-maid-summon:hover {
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #ffffff;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 14px rgba(56, 189, 248, 0.25), inset 0 1px 0 rgba(255,255,255,0.14);
+}
+.dsh-maid-summon:active { transform: translateY(0) scale(0.95); }
+.dsh-maid-summon:focus-visible { outline: 2px solid rgba(56, 189, 248, 0.7); outline-offset: 2px; }
+
+/* 全按钮按压反馈 + 键盘焦点环 */
+.dsh-maid-bubble__btn:active,
+.dsh-aether-btn:active,
+.dsh-aether-session-btn:active,
+.dsh-aether-session-chip:active,
+.dsh-aether-input-btn:active,
+.dsh-aether-agent-tab:active { transform: scale(0.9); }
+.dsh-maid-bubble__btn:focus-visible,
+.dsh-aether-btn:focus-visible,
+.dsh-aether-session-btn:focus-visible,
+.dsh-aether-session-chip:focus-visible,
+.dsh-aether-input-btn:focus-visible,
+.dsh-aether-agent-tab:focus-visible { outline: 2px solid rgba(56, 189, 248, 0.7); outline-offset: 1px; }
+
+/* 尊重系统减弱动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .dsh-maid-sprite,
+  .dsh-aether-sprite,
+  .dsh-aether-aura,
+  .dsh-maid-mobile-aura,
+  .dsh-maid-bubble__ticker,
+  .dsh-aether-pill__dot,
+  .dsh-maid-speech-bubble,
+  .dsh-arrow-accent { animation: none !important; }
+  .dsh-maid-widget,
+  .dsh-maid-bubble,
+  .dsh-aether-card,
+  .dsh-maid-summon,
+  .dsh-aether-header,
+  .dsh-aether-status-bar,
+  .dsh-aether-timeline,
+  .dsh-aether-telemetry,
+  .dsh-aether-input-deck,
+  .dsh-aether-footer-deck,
+  .dsh-maid-status-swap { animation-duration: 0.01ms !important; animation-delay: 0s !important; }
+}
+
+/* ================= 鲸鱼娘经典表情包对话气泡 (Speech Bubble) ================= */
+@keyframes dsh-speech-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.62) translateY(14px) rotate(-3deg);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.05) translateY(-3px) rotate(1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0) rotate(0deg);
+  }
+}
+@keyframes dsh-speech-fadeout {
+  0% { opacity: 1; transform: scale(1) translateY(0); }
+  100% { opacity: 0; transform: scale(0.85) translateY(-8px); }
+}
+@keyframes dsh-arrow-bounce {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(3px, 3px); }
+}
+@keyframes dsh-arrow-bounce-up {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(3px, -3px); }
+}
+
+.dsh-maid-speech-bubble {
+  position: absolute;
+  z-index: 2147483015;
+  min-width: 140px;
+  max-width: 230px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 249, 255, 0.99) 100%);
+  color: #0f172a;
+  border: 2px solid #38bdf8;
+  border-radius: 16px 16px 4px 16px;
+  padding: 8px 12px 9px 12px;
+  box-shadow: 0 12px 32px rgba(14, 165, 233, 0.3), 0 4px 14px rgba(0, 0, 0, 0.2), inset 0 1px 0 #ffffff;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  box-sizing: border-box;
+  animation: dsh-speech-pop 320ms cubic-bezier(0.18, 1.25, 0.35, 1) forwards;
+  transition: box-shadow 200ms ease, border-color 200ms ease, transform 160ms ease;
+  text-align: left;
+}
+.dsh-maid-speech-bubble:hover {
+  border-color: #0284c7;
+  box-shadow: 0 16px 36px rgba(14, 165, 233, 0.42), 0 6px 16px rgba(0, 0, 0, 0.22);
+  transform: translateY(-2px);
+}
+.dsh-maid-speech-bubble:active {
+  transform: scale(0.96);
+}
+.dsh-maid-speech-bubble--fading {
+  animation: dsh-speech-fadeout 260ms cubic-bezier(0.4, 0, 1, 1) forwards !important;
+  pointer-events: none;
+}
+
+/* 挂件模式下默认在精灵左侧/左上方展开 */
+.dsh-maid-speech-bubble--dock-right {
+  bottom: 140px;
+  right: 105px;
+  border-radius: 16px 16px 4px 16px;
+}
+.dsh-maid-speech-bubble--dock-right::after {
+  content: '';
+  position: absolute;
+  bottom: 10px;
+  right: -9px;
+  width: 0;
+  height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 10px solid #38bdf8;
+}
+.dsh-maid-speech-bubble--dock-right::before {
+  content: '';
+  position: absolute;
+  bottom: 11px;
+  right: -6px;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 8px solid #f0f9ff;
+  z-index: 1;
+}
+
+/* 挂件在屏幕左侧时，气泡向右展开 */
+.dsh-maid-speech-bubble--dock-left {
+  bottom: 140px;
+  left: 105px;
+  border-radius: 16px 16px 16px 4px;
+}
+.dsh-maid-speech-bubble--dock-left::after {
+  content: '';
+  position: absolute;
+  bottom: 10px;
+  left: -9px;
+  width: 0;
+  height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-right: 10px solid #38bdf8;
+}
+.dsh-maid-speech-bubble--dock-left::before {
+  content: '';
+  position: absolute;
+  bottom: 11px;
+  left: -6px;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 8px solid #f0f9ff;
+  z-index: 1;
+}
+
+/* 画中画 (PiP) 模式下的气泡 */
+.dsh-maid-speech-bubble--pip {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 250px;
+  border-radius: 16px 16px 16px 4px;
+}
+.dsh-maid-speech-bubble--pip::after {
+  content: '';
+  position: absolute;
+  bottom: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 10px solid #38bdf8;
+}
+.dsh-maid-speech-bubble--pip::before {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid #f0f9ff;
+  z-index: 1;
+}
+
+/* 气泡顶栏 (Tag + Close) */
+.dsh-speech-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.dsh-speech-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #0284c7;
+  background: rgba(56, 189, 248, 0.16);
+  padding: 1.5px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  line-height: 1.2;
+}
+.dsh-speech-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 120ms ease;
+}
+.dsh-speech-close-btn:hover {
+  color: #ef4444;
+}
+
+/* 气泡正文 */
+.dsh-speech-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #0f172a;
+  word-break: break-word;
+  margin-bottom: 2px;
+}
+
+/* 箭头高亮弹跳动效 (纯 SVG 矢量) */
+.dsh-arrow-accent {
+  display: inline-block;
+  vertical-align: -2px;
+  margin-left: 3px;
+  animation: dsh-arrow-bounce 1s ease-in-out infinite;
+  filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.5));
+}
+.dsh-arrow-accent--up {
+  animation: dsh-arrow-bounce-up 1s ease-in-out infinite;
+  filter: drop-shadow(0 0 3px rgba(244, 63, 94, 0.5));
+}
+
+/* 底部轻提示 */
+.dsh-speech-hint {
+  font-size: 9px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  margin-top: 3px;
+  font-weight: 500;
+}
+
+/* 移动端气泡自适应 */
+@media (max-width: 768px) {
+  .dsh-maid-speech-bubble--dock-right {
+    bottom: 52px;
+    right: 68px;
+    min-width: 130px;
+    max-width: 190px;
+    padding: 6px 9px 7px 9px;
+    border-radius: 12px 12px 3px 12px;
+  }
+  .dsh-maid-speech-bubble--dock-left {
+    bottom: 52px;
+    left: 68px;
+    min-width: 130px;
+    max-width: 190px;
+    padding: 6px 9px 7px 9px;
+    border-radius: 12px 12px 12px 3px;
+  }
+  .dsh-speech-text {
+    font-size: 11.5px;
+  }
+  .dsh-speech-tag {
+    font-size: 9px;
+    padding: 1px 5px;
+  }
+}
 `
 
 // ───────── 跨窗口共享事件总线与 PiP 管理 ─────────
@@ -2329,6 +2886,7 @@ async function togglePiP(): Promise<boolean> {
           background: #090a0f;
         }
         ${CSS}
+        ${SPEECH_CSS}
       `
       pipWin.document.head.appendChild(pipCustomStyle)
 
@@ -2378,6 +2936,7 @@ async function togglePiP(): Promise<boolean> {
           margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #090a0f;
         }
         ${CSS}
+        ${SPEECH_CSS}
       `
       popup.document.head.appendChild(pipCustomStyle)
 
@@ -2437,10 +2996,55 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
   const [layoutMode, setLayoutMode] = useState<'wide-large' | 'wide-compact' | 'tall'>('wide-large')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [showCtxPopover, setShowCtxPopover] = useState(false)
+  const [showPushModal, setShowPushModal] = useState(false)
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     return window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
   })
+
+  // 鲸鱼娘表情包台词气泡状态
+  const [speechVisible, setSpeechVisible] = useState(false)
+  const [speechFading, setSpeechFading] = useState(false)
+  const [currentQuote, setCurrentQuote] = useState<SpeechLine>({ text: '', kind: 'say', mood: '' })
+  const [typed, setTyped] = useState(0)
+  const typeTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const lastSpeakRef = useRef<number>(0)
+  const patBurstRef = useRef<number[]>([])
+  const hoverRef = useRef(false)
+  const [fx, setFx] = useState<Array<{ id: number; x: number; y: number; type: 'heart' | 'star' | 'ring' | 'blush'; dx: number; dy: number; rot: number; color: string }>>([])
+  const fxIdRef = useRef(0)
+  const [pressed, setPressed] = useState(false)
+  const lastClickRef = useRef(0)
+  // 表情：反应（短暂）> 正在说的台词情绪 > 做完/出错后的余韵 > 当前工作状态
+  const [reactFace, setReactFace] = useState<Face | null>(null)
+  const reactTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const [glowFace, setGlowFace] = useState<Face | null>(null)
+  const glowTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const [blinking, setBlinking] = useState(false)
+  const [dozing, setDozing] = useState(false)
+  const dozingRef = useRef(false)
+  const lookRef = useRef<HTMLDivElement | null>(null)
+  const dragStartRef = useRef<() => void>(() => {})
+  const react = (f: Face, ms: number): void => {
+    if (reactTimerRef.current) clearTimeout(reactTimerRef.current)
+    setReactFace(f)
+    reactTimerRef.current = setTimeout(() => { setReactFace(null); reactTimerRef.current = null }, ms)
+  }
+  const glow = (f: Face | null, ms = 0): void => {
+    if (glowTimerRef.current) { clearTimeout(glowTimerRef.current); glowTimerRef.current = null }
+    setGlowFace(f)
+    if (f) glowTimerRef.current = setTimeout(() => { setGlowFace(null); glowTimerRef.current = null }, ms)
+  }
+  const [quoteKey, setQuoteKey] = useState(0)
+  const speechTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const lastQuoteIndexRef = useRef<number>(-1)
+
+  useEffect(() => {
+    return () => {
+      if (speechTimerRef.current) clearTimeout(speechTimerRef.current)
+      if (typeTimerRef.current) clearTimeout(typeTimerRef.current)
+    }
+  }, [])
 
   // 悬浮窗输入框状态
   const [inputText, setInputText] = useState('')
@@ -2570,7 +3174,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     setHidden(h)
   }
   const widgetRef = useRef<HTMLDivElement | null>(null)
-  const drag = useDrag(pos, setPos, isMobile, widgetRef)
+  const drag = useDrag(pos, setPos, isMobile, widgetRef, () => dragStartRef.current())
 
   const applyState = (s: MaidState): void => {
     if (!s) return
@@ -2675,12 +3279,304 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     } catch { /* ignore */ }
   }
 
-  const onClickSprite = async (): Promise<void> => {
+  // 说一句话：打字机逐字出现，读完自动收起；鼠标悬停时不收
+  const scheduleHide = (line: SpeechLine): void => {
+    if (speechTimerRef.current) clearTimeout(speechTimerRef.current)
+    speechTimerRef.current = setTimeout(() => {
+      if (hoverRef.current) { scheduleHide(line); return }
+      setSpeechFading(true)
+      speechTimerRef.current = setTimeout(() => {
+        setSpeechVisible(false)
+        setSpeechFading(false)
+        speechTimerRef.current = null
+      }, 220)
+    }, readTimeMs(line.text, line.kind))
+  }
+  const say = (trigger: Trigger, opts: { force?: boolean; minGapMs?: number } = {}): void => {
+    const now = Date.now()
+    if (!opts.force && now - lastSpeakRef.current < (opts.minGapMs ?? 0)) return
+    lastSpeakRef.current = now
+    const line = pickLine(trigger)
+    setCurrentQuote(line)
+    setQuoteKey(k => k + 1)
+    setSpeechVisible(true)
+    setSpeechFading(false)
+    if (speechTimerRef.current) { clearTimeout(speechTimerRef.current); speechTimerRef.current = null }
+    if (typeTimerRef.current) clearTimeout(typeTimerRef.current)
+    const chars = segments(line.text).flatMap(sg => [...sg.text])
+    let i = 0
+    setTyped(0)
+    const step = (): void => {
+      i++
+      setTyped(i)
+      if (i >= chars.length) { typeTimerRef.current = null; scheduleHide(line); return }
+      typeTimerRef.current = setTimeout(step, charDelay(chars[i - 1], line.kind))
+    }
+    typeTimerRef.current = setTimeout(step, 120)
+  }
+  // 点击特效：在点的位置冒出爱心 / 星星 / 涟漪，连摸会脸红
+  const spawnFx = (x: number, y: number, n: number): void => {
+    const colors = ['#ff6b9a', '#ff8fb1', '#ffd166', '#7cc4ff', '#ff6b9a']
+    const items: typeof fx = []
+    const count = Math.min(4 + n, 9)
+    items.push({ id: ++fxIdRef.current, x, y, type: 'ring', dx: 0, dy: 0, rot: 0, color: '' })
+    for (let i = 0; i < count; i++) {
+      const ang = (-90 + (Math.random() - 0.5) * 150) * Math.PI / 180
+      const dist = 38 + Math.random() * 46
+      items.push({ id: ++fxIdRef.current, x, y, type: Math.random() < 0.7 ? 'heart' : 'star', dx: Math.cos(ang) * dist, dy: Math.sin(ang) * dist, rot: (Math.random() - 0.5) * 70, color: colors[i % colors.length] })
+    }
+    if (n >= 3) items.push({ id: ++fxIdRef.current, x: 0, y: 0, type: 'blush', dx: 0, dy: 0, rot: 0, color: '' })
+    setFx(list => list.concat(items).slice(-40))
+    const ids = new Set(items.map(it => it.id))
+    setTimeout(() => setFx(list => list.filter(it => !ids.has(it.id))), 1500)
+  }
+
+  // 摸头：连续摸会越来越不耐烦（「好模型……」混在普通台词里随机抽到）
+  const showNextQuote = (): void => {
+    const now = Date.now()
+    patBurstRef.current = patBurstRef.current.filter(t => now - t < 6000).concat(now)
+    const n = patBurstRef.current.length
+    lastClickRef.current = now
+    say(n >= 7 ? 'patTooMuch' : n >= 4 ? 'patMany' : 'pat', { force: true })
+  }
+
+  // ───── 让她「看情况说话」：跟着任务状态、时间和你的动作开口 ─────
+  const prevPhaseRef = useRef<Phase>('idle')
+  const turnStartRef = useRef<number>(0)
+  const thinkStartRef = useRef<number>(0)
+  const saidLongThinkRef = useRef(false)
+  const lastToolRef = useRef<string | null>(null)
+  const lastActivityRef = useRef<number>(Date.now())
+  const greetedRef = useRef(false)
+  const toolCountRef = useRef(0)
+  const failStreakRef = useRef(0)
+  const lastUserInputRef = useRef<string | null>(null)
+  const posInitRef = useRef(0)
+
+  // 打瞌睡被叫醒：吓一跳 + 嘴硬「我没睡」
+  const wake = (byUser: boolean): boolean => {
+    lastActivityRef.current = Date.now()
+    if (!dozingRef.current) return false
+    dozingRef.current = false
+    setDozing(false)
+    if (byUser) { react('surprised', 1400); say('wake', { force: true }) }
+    return true
+  }
+  // 被拎起来：吓一跳
+  dragStartRef.current = () => {
+    wake(false)
+    react('surprised', 1600)
+    say('dragStart', { minGapMs: 20000 })
+  }
+
+  // 你发了新消息 → 她应一声
+  useEffect(() => {
+    if (!ready || hidden || !userInput) return
+    if (lastUserInputRef.current === null) { lastUserInputRef.current = userInput; return }
+    if (userInput !== lastUserInputRef.current) {
+      lastUserInputRef.current = userInput
+      wake(false)
+      lastActivityRef.current = Date.now()
+      if (Math.random() < 0.7) say('userSend', { minGapMs: 4000 })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userInput, ready, hidden])
+
+  // 被拖到新位置 → 说一句（初次加载不算）
+  useEffect(() => {
+    if (isPiP || !ready) return
+    posInitRef.current++
+    if (posInitRef.current <= 2) return
+    const t = setTimeout(() => say('dragEnd', { minGapMs: 15000 }), 450)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pos.right, pos.bottom])
+
+  useEffect(() => {
+    if (!ready || hidden) return
+    const prev = prevPhaseRef.current
+    prevPhaseRef.current = phase
+    if (phase === prev && phase !== 'tool') return
+    const now = Date.now()
+    wake(false)
+    lastActivityRef.current = now
+    if (phase === 'thinking' || phase === 'waiting' || phase === 'tool' || phase === 'review') glow(null)
+    if (phase !== 'idle' && (prev === 'idle' || prev === 'done' || prev === 'failed')) {
+      turnStartRef.current = now
+      saidLongThinkRef.current = false
+      toolCountRef.current = 0
+    }
+    if (phase === 'thinking' && prev !== 'thinking') {
+      thinkStartRef.current = now
+      if (Math.random() < 0.75) say('thinkStart', { minGapMs: 12000 })
+    } else if (phase === 'tool') {
+      if (tool && tool !== lastToolRef.current) {
+        lastToolRef.current = tool
+        toolCountRef.current++
+        if (toolCountRef.current === 8 || toolCountRef.current === 20) say('toolMany', { minGapMs: 8000 })
+        else if (Math.random() < 0.65) say(toolTrigger(tool), { minGapMs: 12000 })
+      }
+    } else if (phase === 'review' || phase === 'waiting') {
+      if (phase === 'review') say('waiting', { force: true })
+    } else if (phase === 'done' && prev !== 'done') {
+      glow('happy', 12000)
+      lastToolRef.current = null
+      failStreakRef.current = 0
+      const dur = turnStartRef.current ? now - turnStartRef.current : 0
+      const turnTokens = (metrics?.turnBilledInput || 0) + (metrics?.turnCacheRead || 0)
+      const ctxPct = metrics?.modelMeta?.context?.usedPercentNum || 0
+      if (ctxPct >= 85) say('contextFull', { force: true })
+      else if (dur > 90000) say('doneLong', { force: true })
+      else if (turnTokens > 400000 && Math.random() < 0.5) say('bigTokens', { force: true })
+      else if ((metrics?.turnCacheHitRate || 0) > 0.9 && turnTokens > 50000 && Math.random() < 0.4) say('cacheHigh', { force: true })
+      else if (dur > 0 && dur < 12000) say('doneFast', { force: true })
+      else say('done', { force: true })
+    } else if (phase === 'failed' && prev !== 'failed') {
+      glow('sad', 9000)
+      lastToolRef.current = null
+      failStreakRef.current++
+      say(failStreakRef.current >= 3 ? 'failStreak' : 'failed', { force: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, tool, ready, hidden])
+
+  // 想太久了会自己解释一句（每轮最多一次）
+  useEffect(() => {
+    if (phase !== 'thinking' || hidden) return
+    const t = setInterval(() => {
+      const el = Date.now() - thinkStartRef.current
+      if (!saidLongThinkRef.current && el > 30000) {
+        saidLongThinkRef.current = true
+        say('thinkLong', { minGapMs: 10000 })
+      } else if (el > 120000 && el < 126000) {
+        say('thinkVeryLong', { minGapMs: 30000 })
+      }
+    }, 5000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, hidden])
+
+  // 打招呼 + 闲着时偶尔嘀咕（饭点/深夜有专门台词）；离开页面回来会说「欢迎回来」
+  useEffect(() => {
+    if (!ready || hidden || isPiP) return
+    if (!greetedRef.current) {
+      greetedRef.current = true
+      setTimeout(() => say(greetTrigger(), { force: true }), 1800)
+    }
+    let awayAt = 0
+    const onVis = (): void => {
+      if (document.hidden) awayAt = Date.now()
+      else if (awayAt && Date.now() - awayAt > 10 * 60000) { awayAt = 0; say('back', { minGapMs: 20000 }) }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    const t = setInterval(() => {
+      if (document.hidden) return
+      const idleFor = Date.now() - Math.max(lastActivityRef.current, lastSpeakRef.current)
+      if (prevPhaseRef.current !== 'idle' && prevPhaseRef.current !== 'done') return
+      if (dozingRef.current) { if (Math.random() < 0.3) say('doze', { minGapMs: 150000 }); return }
+      if (idleFor > 2 * 60000 && Math.random() < 0.55) say(timeTrigger() || 'idle', { minGapMs: 90000 })
+    }, 45000)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, hidden, isPiP])
+
+  // 预加载表情帧，切换时不闪
+  useEffect(() => { preloadFaces() }, [])
+
+  // 眨眼：2~6 秒一次，偶尔连眨两下
+  useEffect(() => {
+    if (!ready || hidden) return
+    let t: NodeJS.Timeout | null = null
+    const once = (after: () => void): void => {
+      setBlinking(true)
+      t = setTimeout(() => { setBlinking(false); after() }, 120)
+    }
+    const loop = (): void => {
+      t = setTimeout(() => {
+        if (document.hidden) { loop(); return }
+        once(() => {
+          if (Math.random() < 0.22) t = setTimeout(() => once(loop), 160)
+          else loop()
+        })
+      }, 2200 + Math.random() * 3800)
+    }
+    loop()
+    return () => { if (t) clearTimeout(t) }
+  }, [ready, hidden])
+
+  // 闲太久会打瞌睡（点头、Zzz）；你一动她就惊醒
+  useEffect(() => {
+    if (!ready || hidden || isPiP) return
+    const t = setInterval(() => {
+      if (document.hidden || dozingRef.current) return
+      const p = prevPhaseRef.current
+      if (p !== 'idle' && p !== 'done') return
+      const quiet = Date.now() - Math.max(lastActivityRef.current, lastSpeakRef.current)
+      if (quiet > 150000) {
+        dozingRef.current = true
+        setDozing(true)
+        if (Math.random() < 0.6) say('doze', { force: true })
+      }
+    }, 8000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, hidden, isPiP])
+
+  // 视线跟随：鼠标在哪边，她的脑袋就轻轻歪向哪边（直接改 DOM，不触发重渲染）
+  useEffect(() => {
+    if (!ready || hidden || isPiP || isMobile) return
+    let raf = 0, lx = 0, ly = 0
+    const apply = (): void => {
+      raf = 0
+      const el = lookRef.current
+      if (!el) return
+      if (dozingRef.current || widgetRef.current?.classList.contains('dsh-maid-widget--dragging')) {
+        el.style.removeProperty('rotate'); el.style.removeProperty('translate'); return
+      }
+      const r = el.getBoundingClientRect()
+      const dx = lx - (r.left + r.width * 0.45), dy = ly - (r.top + r.height * 0.4)
+      const dist = Math.hypot(dx, dy)
+      const k = dist < 30 ? 0 : Math.min(1, 240 / dist + 0.3)
+      const deg = Math.max(-5, Math.min(5, dx / 55)) * k
+      const ty = Math.max(-3, Math.min(3, dy / 110)) * k
+      el.style.rotate = deg.toFixed(2) + 'deg'
+      el.style.translate = (deg * 0.7).toFixed(1) + 'px ' + ty.toFixed(1) + 'px'
+    }
+    const onMove = (e: MouseEvent): void => { lx = e.clientX; ly = e.clientY; if (!raf) raf = requestAnimationFrame(apply) }
+    window.addEventListener('mousemove', onMove, { passive: true })
+    return () => { window.removeEventListener('mousemove', onMove); if (raf) cancelAnimationFrame(raf) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, hidden, isPiP, isMobile])
+
+  const hideQuote = (): void => {
+    if (typeTimerRef.current) { clearTimeout(typeTimerRef.current); typeTimerRef.current = null }
+    if (speechTimerRef.current) {
+      clearTimeout(speechTimerRef.current)
+      speechTimerRef.current = null
+    }
+    setSpeechFading(true)
+    setTimeout(() => {
+      setSpeechVisible(false)
+      setSpeechFading(false)
+    }, 200)
+  }
+
+  const onClickSprite = async (e?: React.MouseEvent): Promise<void> => {
     if (!isPiP && drag.wasDrag()) return
+    setPressed(false)
+    if (e && e.currentTarget) {
+      const box = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      const host = (e.currentTarget as HTMLElement).parentElement?.getBoundingClientRect() || box
+      const x = (e.clientX || box.left + box.width / 2) - host.left
+      const y = (e.clientY || box.top + box.height * 0.35) - host.top
+      const now = Date.now()
+      spawnFx(x, y, patBurstRef.current.filter(t => now - t < 6000).length + 1)
+    }
     setBumpKey(k => k + 1)
     setPatPopKey(k => k + 1)
     setPatCount(c => c + 1)
     playPress()
+    if (!wake(true)) showNextQuote()
     try { await fetch('/api/maid/pat', { method: 'POST', body: '' }) } catch { /* ignore */ }
   }
 
@@ -3245,6 +4141,127 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
       )
     }
 
+    // 渲染【Web Push 离线推送设置弹窗】
+    const renderPushModal = () => {
+      if (!showPushModal) return null
+      return h('div', {
+        key: 'maid-push-modal-backdrop',
+        style: {
+          position: 'fixed', left: 0, top: 0, right: 0, bottom: 0,
+          background: 'rgba(0, 0, 0, 0.78)', backdropFilter: 'blur(8px)',
+          zIndex: 2147483647, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '16px', boxSizing: 'border-box',
+          pointerEvents: 'auto',
+        },
+        onClick: (e: React.MouseEvent) => {
+          if (e.target === e.currentTarget) setShowPushModal(false)
+        },
+      },
+        h('div', {
+          style: {
+            background: '#0f172a',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            borderRadius: '16px',
+            maxWidth: '820px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            position: 'relative',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6)',
+          }
+        },
+          h('button', {
+            style: {
+              position: 'absolute', right: '16px', top: '16px',
+              background: 'rgba(255, 255, 255, 0.08)', border: 'none',
+              color: '#fff', width: '28px', height: '28px', borderRadius: '50%',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '16px', zIndex: 10,
+            },
+            onClick: () => setShowPushModal(false),
+            title: '关闭',
+          }, h(IconClose, { size: 14 })),
+          h(WebPushSettingsSection)
+        )
+      )
+    }
+
+    // ───── 当前表情 ─────
+    const speakingNow = speechVisible && !speechFading && !!currentQuote.text
+    const moodFace: Face | undefined = !speakingNow ? undefined
+      : /哈欠|揉眼|眼皮/.test(currentQuote.text) ? 'sleepy'
+      : currentQuote.kind === 'think' ? 'think' : MOOD_FACE[currentQuote.mood]
+    const phaseFace: Face = dozing ? 'sleepy'
+      : (phase === 'thinking' || phase === 'waiting') ? 'think'
+      : (phase === 'tool' || phase === 'review') ? 'focus' : 'neutral'
+    const eventFace = reactFace ?? moodFace ?? glowFace
+    const baseFace: Face = eventFace ?? phaseFace
+    const shownFace: Face = blinking && BLINKABLE.has(baseFace) ? 'blink' : baseFace
+    const manpu: Manpu | null = dozing && !reactFace ? 'zzz' : (eventFace ? (FACE_MANPU[eventFace] ?? null) : null)
+    const talking = speakingNow && typed < plainLength(currentQuote.text)
+    const renderManpu = () => {
+      if (!manpu) return null
+      const P = (d: string, cls: string, k: string) => h('path', { key: k, d, className: cls })
+      const body = manpu === 'think' ? [h('text', { key: 'q', x: 5, y: 21, className: 'q' }, '?'), h('circle', { key: 'd', cx: 21, cy: 21, r: 2 })]
+        : manpu === 'zzz' ? [h('text', { key: 'a', x: 1, y: 24, className: 'z z1' }, 'z'), h('text', { key: 'b', x: 9, y: 15, className: 'z z2' }, 'z'), h('text', { key: 'c', x: 16, y: 8, className: 'z z3' }, 'Z')]
+        : manpu === 'sweat' ? [P('M13 3 C 9 10, 6 13, 6 17 a 7 7 0 0 0 14 0 C 20 13, 17 10, 13 3 Z', 'drop', 'a'), P('M10 16 q 0 3 3 4', 'shine', 'b')]
+        : manpu === 'bang' ? [P('M5 5 L8.5 15', 'line', 'a'), P('M13 2 L13 14', 'line', 'b'), P('M21 5 L17.5 15', 'line', 'c')]
+        : manpu === 'vein' ? [P('M4 10 Q 10 10 10 4 M16 4 Q 16 10 22 10 M22 16 Q 16 16 16 22 M10 22 Q 10 16 4 16', 'vein', 'a')]
+        : manpu === 'sparkle' ? [P('M8 2 L9.6 7.4 L15 9 L9.6 10.6 L8 16 L6.4 10.6 L1 9 L6.4 7.4 Z', 'spark', 'a'), P('M19 12 L20 15 L23 16 L20 17 L19 20 L18 17 L15 16 L18 15 Z', 'spark s2', 'b')]
+        : [P('M13 22 C 4 15, 3 10, 6 7 C 9 4, 12 6, 13 8 C 14 6, 17 4, 20 7 C 23 10, 22 15, 13 22 Z', 'heart', 'a')]
+      return h('div', { key: 'manpu-' + manpu + '-' + quoteKey, className: `dsh-manpu dsh-manpu--${manpu}`, 'aria-hidden': true },
+        h('svg', { viewBox: '0 0 26 26' }, ...body))
+    }
+
+    // 渲染二次元漫画经典表情包对话气泡 (Speech Bubble - 100% 纯 SVG，禁止 Emoji)
+    const renderFx = () => fx.length ? h('div', { className: 'dsh-fx-layer', key: 'fx' },
+      ...fx.map(it => it.type === 'ring'
+        ? h('div', { key: it.id, className: 'dsh-fx dsh-fx--ring', style: { left: it.x + 'px', top: it.y + 'px' } })
+        : it.type === 'blush'
+          ? h('div', { key: it.id, className: 'dsh-fx dsh-fx--blush', style: { transform: 'translate(-50%, -50%)' } })
+          : h('div', { key: it.id, className: 'dsh-fx', style: { left: it.x + 'px', top: it.y + 'px', ['--dx' as any]: it.dx + 'px', ['--dy' as any]: it.dy + 'px', ['--rot' as any]: it.rot + 'deg' } },
+            h('svg', { viewBox: '0 0 24 24', 'aria-hidden': true },
+              it.type === 'heart'
+                ? h('path', { d: 'M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 5 6.4 5c2.1 0 3.6 1.2 4.6 2.7C12 6.2 13.5 5 15.6 5 19 5 21.1 8.4 19.6 11.8 17.5 16.4 12 21 12 21z', fill: it.color, stroke: '#fff', strokeWidth: 1.5 })
+                : h('path', { d: 'M12 2.5l2.6 6.3 6.8.5-5.2 4.4 1.6 6.6L12 16.8l-5.8 3.5 1.6-6.6-5.2-4.4 6.8-.5z', fill: it.color, stroke: '#fff', strokeWidth: 1.5 })))
+      )) : null
+
+    const renderSpeechBubble = (inPiP: boolean) => {
+      if (!speechVisible || !currentQuote.text) return null
+      const isDockLeft = typeof window !== 'undefined' && pos.right > (window.innerWidth / 2)
+      const dockClass = inPiP ? 'dsh-say--pip' : (isDockLeft ? 'dsh-say--dock-left' : 'dsh-say--dock-right')
+      const k = currentQuote.kind
+      let left = typed
+      const parts: React.ReactNode[] = []
+      segments(currentQuote.text).forEach((sg, idx) => {
+        if (left <= 0) return
+        const cs = [...sg.text]
+        const shown = cs.slice(0, left).join('')
+        left -= cs.length
+        parts.push(sg.aside ? h('span', { key: idx, className: 'dsh-say__aside' }, shown)
+          : sg.em ? h('span', { key: idx, className: 'dsh-say__em' }, shown)
+          : h(React.Fragment, { key: idx }, shown))
+      })
+      const typing = typed < plainLength(currentQuote.text)
+      return h('div', {
+        key: 'speech-' + quoteKey,
+        className: `dsh-say dsh-say--${k} ${dockClass}${speechFading ? ' dsh-say--out' : ''}`,
+        'data-mood': currentQuote.mood,
+        onClick: (e: React.MouseEvent) => { e.stopPropagation(); if (typed < plainLength(currentQuote.text)) { if (typeTimerRef.current) clearTimeout(typeTimerRef.current); typeTimerRef.current = null; setTyped(plainLength(currentQuote.text)); scheduleHide(currentQuote) } else hideQuote() },
+        onMouseEnter: () => { hoverRef.current = true },
+        onMouseLeave: () => { hoverRef.current = false },
+        title: '点一下：打完 / 收起',
+      },
+        k === 'shout' ? h('svg', { key: 'burst', className: 'dsh-say__burst', viewBox: '0 0 22 20', 'aria-hidden': true },
+          h('path', { d: 'M3 3 L8 8 M11 1 L11.5 7 M1 11 L7 11.5' })) : null,
+        ...parts,
+        typing ? h('span', { className: 'dsh-say__caret', key: 'caret' }) : null,
+        h('svg', { key: 'tail', className: 'dsh-say__tail', viewBox: '0 0 22 20', 'aria-hidden': true },
+          h('path', { d: 'M1 2 C8 4 14 8 21 18 C14 15 8 14 1 13' }),
+          h('path', { className: 'cover', d: 'M-1 3.5 L4 3.5 L4 11.5 L-1 11.5 Z' }))
+      )
+    }
+
     // 渲染【全功能移动端 / 页面内控制台抽屉】
     const renderDrawer = () => {
       return [
@@ -3273,7 +4290,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
                 title: '轻摸 maid',
               },
                 h('img', {
-                  src: MAID_PNG,
+                  src: FACES[shownFace],
                   className: 'dsh-aether-mini-avatar-img',
                   alt: 'maid',
                 })
@@ -3281,6 +4298,11 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
               h('div', { className: 'dsh-aether-drawer-title', title: promptTitle }, promptTitle)
             ),
             h('div', { className: 'dsh-aether-ctrls' },
+              h('button', {
+                className: 'dsh-aether-btn',
+                onClick: () => setShowPushModal(true),
+                title: '设置离线消息推送 (Web Push)',
+              }, h(IconBell, { size: 14 })),
               h('button', {
                 className: 'dsh-aether-btn',
                 onClick: toggleSound,
@@ -3315,7 +4337,8 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
                 meta.text
               ),
               h('div', {
-                className: `dsh-aether-ticker-box dsh-maid-bubble__status--${currentDisplayPhase}${aetherFadeClass}`,
+                key: 'istat-' + currentDisplayPhase,
+                className: `dsh-aether-ticker-box dsh-maid-bubble__status--${currentDisplayPhase}${aetherFadeClass} dsh-maid-status-swap`,
               },
                 h('span', {
                   className: 'dsh-maid-bubble__ticker',
@@ -3341,14 +4364,18 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
       const cardClass = `dsh-aether-card dsh-mode-${layoutMode}`
       const isLargeMode = layoutMode === 'wide-large'
 
-      return h('div', { className: cardClass, ref: cardRef },
-        // 1. 全局最左侧：会话导航栏 (无论宽屏、窄屏、竖屏模式均常驻可用)
+      return h(React.Fragment, null,
+        h('div', { className: cardClass, ref: cardRef, 'data-phase': currentDisplayPhase },
+          // 1. 全局最左侧：会话导航栏 (无论宽屏、窄屏、竖屏模式均常驻可用)
         renderSessionRail(),
 
         // 2. 角色立绘展台 (Podium)
         h('div', {
           className: 'dsh-aether-podium',
-          onClick: () => { void onClickSprite() },
+          onClick: (e: React.MouseEvent) => { void onClickSprite(e) },
+          onPointerDown: () => setPressed(true),
+          onPointerUp: () => setPressed(false),
+          onPointerLeave: () => setPressed(false),
           onContextMenu,
         },
           h('div', { className: 'dsh-aether-avatar-wrapper' },
@@ -3367,11 +4394,13 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
             }, h(IconHeart, { size: 10 }), String(patCount)) : null,
             h('img', {
               key: 'pip-sprite-' + bumpKey,
-              className: `dsh-aether-sprite${bumpKey > 0 ? ' dsh-aether-sprite--bump' : ''}`,
-              src: MAID_PNG,
+              className: `dsh-aether-sprite${bumpKey > 0 ? ' dsh-aether-sprite--bump' : ''}${pressed ? ' dsh-maid-sprite--pressed' : ''}`,
+              src: FACES[shownFace],
               alt: 'maid pet',
               draggable: false,
-            })
+            }),
+            renderFx(),
+            renderSpeechBubble(true)
           ),
           isLargeMode ? renderTelemetry() : null
         ),
@@ -3385,6 +4414,11 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
               promptTitle
             ),
             h('div', { className: 'dsh-aether-ctrls' },
+              h('button', {
+                className: 'dsh-aether-btn',
+                onClick: () => setShowPushModal(true),
+                title: '设置离线消息推送 (Web Push)',
+              }, h(IconBell, { size: 14 })),
               h('button', {
                 className: 'dsh-aether-btn',
                 onClick: toggleSound,
@@ -3434,8 +4468,10 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
           // 5. 最底部：全功能底座状态栏 (当前模型 + Effort + 上下文统计 + 响应速度)
           renderFooterDeck()
         )
-      )
-    }
+      ),
+      renderPushModal()
+    )
+  }
 
     // ═══════════════════════════════════════════════════════════
     // 2. 普通网页右下角模式 (isPiP = false) + 全功能移动端抽屉
@@ -3444,10 +4480,12 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     const widgetStyle = { right: pos.right + 'px', bottom: pos.bottom + 'px' } as React.CSSProperties
     const pipBtnClass = `dsh-maid-bubble__btn${pipActive ? ' dsh-maid-bubble__btn--pip-active' : ''}`
     const isDockLeft = typeof window !== 'undefined' && pos.right > (window.innerWidth / 2)
-    const bubbleClass = `dsh-maid-bubble${isDockLeft ? ' dsh-maid-bubble--dock-left' : ''}`
+    // 她一开口（任何台词气泡），上方的工作状态框就先让位；气泡开始收起时状态框再回来
+    const speaking = speechVisible && !speechFading && !!currentQuote.text
+    const bubbleClass = `dsh-maid-bubble${isDockLeft ? ' dsh-maid-bubble--dock-left' : ''}${speaking ? ' dsh-maid-bubble--eclipsed' : ''}`
 
     return h(React.Fragment, null,
-      h('div', { className: 'dsh-maid-widget', ref: widgetRef, style: widgetStyle },
+      h('div', { className: 'dsh-maid-widget', ref: widgetRef, style: widgetStyle, 'data-phase': phase },
         h('div', {
           className: bubbleClass,
           key: 'bubble',
@@ -3459,7 +4497,8 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
             h('span', { className: 'dsh-maid-bubble__title-text', title: promptTitle }, promptTitle)
           ),
           h('div', {
-            className: statusClass,
+            key: 'mstat-' + phase,
+            className: statusClass + ' dsh-maid-status-swap',
             ref: containerRef,
           },
             h('span', {
@@ -3469,6 +4508,14 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
             }, finalStatusText)
           ),
           h('div', { className: 'dsh-maid-bubble__actions' },
+            h('button', {
+              className: 'dsh-maid-bubble__btn',
+              onClick: (e: React.MouseEvent) => {
+                e.stopPropagation()
+                setShowPushModal(true)
+              },
+              title: '离线消息推送设置 (Web Push)',
+            }, h(IconBell, { size: 12 })),
             h('button', {
               className: pipBtnClass,
               onClick: (e: React.MouseEvent) => {
@@ -3489,13 +4536,17 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
               className: 'dsh-maid-bubble__btn',
               onClick: (e: React.MouseEvent) => { e.stopPropagation(); setHiddenPersist(true) },
               title: '隐藏',
-            }, '×'),
+            }, h(IconClose, { size: 11 })),
           ),
         ),
         h('div', {
           className: 'dsh-maid-sprite-box',
           key: 'sprite-box',
         },
+          isMobile ? h('div', {
+            className: 'dsh-maid-mobile-aura',
+            style: { background: meta.aura },
+          }) : null,
           patCount > 0 ? h('div', {
             className: 'dsh-maid-pat-badge',
             key: 'badge-' + patCount,
@@ -3506,19 +4557,29 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
             key: 'pop-' + patPopKey,
             style: { display: 'flex', alignItems: 'center', gap: '3px' }
           }, h(IconHeart, { size: 12 }), '+1') : null,
+          h('div', { className: `dsh-maid-look${dozing ? ' dsh-maid-look--dozing' : ''}`, ref: lookRef, key: 'look' },
+          h('div', { className: `dsh-maid-talk${talking ? ' dsh-maid-talk--on' : ''}` },
           h('img', {
             key: 'sprite-' + bumpKey,
-            className: `dsh-maid-sprite${bumpKey > 0 ? ' dsh-maid-sprite--bump' : ''}`,
-            src: MAID_PNG,
+            className: `dsh-maid-sprite${bumpKey > 0 ? ' dsh-maid-sprite--bump' : ''}${pressed ? ' dsh-maid-sprite--pressed' : ''}`,
+            src: FACES[shownFace],
             alt: 'maid pet',
             draggable: false,
-            onPointerDown: drag.onDown,
-            onClick: () => { void onClickSprite() },
+            onPointerDown: (e: React.PointerEvent) => { setPressed(true); drag.onDown(e as any) },
+            onPointerUp: () => setPressed(false),
+            onPointerLeave: () => setPressed(false),
+            onPointerCancel: () => setPressed(false),
+            onMouseEnter: () => { if (!wake(true) && Math.random() < 0.35) say('hover', { minGapMs: 45000 }) },
+            onClick: (e: React.MouseEvent) => { void onClickSprite(e) },
             onContextMenu,
-          })
+          }))),
+          renderManpu(),
+          renderFx(),
+          renderSpeechBubble(false)
         )
       ),
-      ...renderDrawer()
+      ...renderDrawer(),
+      renderPushModal()
     )
 }
 
@@ -3529,7 +4590,7 @@ function installStyles(ctx: any): void {
     const tag = document.createElement('style')
     tag.dataset.plugin = PLUGIN_ID
     tag.dataset.pluginCss = `${PLUGIN_ID}/maid.css`
-    tag.textContent = CSS
+    tag.textContent = CSS + SPEECH_CSS
     document.head.appendChild(tag)
     return () => {
       tag.remove()
@@ -3663,5 +4724,16 @@ export function apply(ctx: any): void {
     ctx.effect(() => ctx.slots.inject('shell.overlay', () =>
       ctx.slots.register({ name: 'shell.overlay', id: 'dsh-floating-maid-stub', order: 999, label: 'maid stub' }, () => null)
     ), 'maid: shell.overlay stub')
+  } catch { /* ignore */ }
+
+  try {
+    ctx.effect(() => ctx.slots.inject('settings.section', () =>
+      ctx.slots.register({
+        name: 'settings.section',
+        id: 'floating-maid-webpush',
+        order: 48,
+        label: '离线推送 (Web Push)',
+      }, WebPushSettingsSection)
+    ), 'maid: settings.section webpush')
   } catch { /* ignore */ }
 }

@@ -86,13 +86,16 @@ else
     mkdir -p node_modules/@standard-schema
     ln -sfn "$(cd "$STD_SCHEMA" && pwd)" node_modules/@standard-schema/spec
   fi
+  if [ -d "/home/qiyu/.nvm/versions/node/v22.22.2/lib/node_modules/9remote/node_modules/web-push" ] && [ ! -e "node_modules/web-push" ]; then
+    ln -sfn /home/qiyu/.nvm/versions/node/v22.22.2/lib/node_modules/9remote/node_modules/web-push node_modules/web-push
+  fi
 fi
 
 echo "=== Compiling src → lib ($TSC) ==="
 "$TSC" -p tsconfig.json
 
-if [ -f tsdown.config.ts ] && [ -x "$ROOT/node_modules/.bin/tsdown" ]; then
+if [ -f tsdown.config.ts ]; then
   echo "=== Building client bundle (tsdown) ==="
-  npm run build:client --silent
+  node "$ROOT/node_modules/tsdown/dist/run.mjs"
 fi
 echo "=== Build complete ==="

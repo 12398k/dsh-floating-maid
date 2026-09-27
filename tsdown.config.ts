@@ -1,7 +1,8 @@
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { UserConfig } from 'tsdown'
 
-const PLUGIN_ID = "@dsh-external/dsh-floating-maid"
+const PLUGIN_ID = (JSON.parse(readFileSync(fileURLToPath(new URL('package.json', import.meta.url)), 'utf8')) as { name: string }).name
 
 const CLIENT_EXTERNALS = [
   'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client',

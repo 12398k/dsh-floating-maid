@@ -1,0 +1,7 @@
+# whale-girl-pet bundle patch: registers this package as a cordis service layer
+# so `dsh plugin --profile web add whale-girl-pet` joins the profile load tree
+# automatically (no manual patch editing).
+
+- insert:
+    - id: whale-girl-pet
+      name: 'whale-girl-pet'

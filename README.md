@@ -1,4 +1,4 @@
-# @dsh-external/dsh-floating-maid
+# whale-girl-pet
 
 悬浮窗 maid 宠物：监听 session 事件 + 透明化女仆 sprite + Codex 风格状态气泡
 

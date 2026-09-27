@@ -3,3 +3,5 @@ lib/
 *.tsbuildinfo
 *.tgz
 __pycache__/
+data/
+.npm-cache/
