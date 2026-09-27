@@ -17,12 +17,9 @@ const require = createRequire(import.meta.url)
 let webpush: any = null
 try {
   webpush = require('web-push')
-} catch {
-  try {
-    webpush = require('/home/qiyu/.nvm/versions/node/v22.22.2/lib/node_modules/9remote/node_modules/web-push')
-  } catch (err) {
-    console.error('[dsh-floating-maid:webpush] web-push 依赖未找到', err)
-  }
+} catch (err) {
+  // web-push 是 optionalDependency：缺失时插件其余功能照常，仅推送静默禁用
+  console.error('[dsh-floating-maid:webpush] web-push 依赖未找到，Web Push 功能已禁用', err)
 }
 
 export interface VapidKeys {

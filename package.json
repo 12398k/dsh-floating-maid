@@ -1,6 +1,6 @@
 {
   "name": "whale-girl-pet",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "悬浮窗 maid 宠物：监听 session 事件 + 透明化女仆 sprite + Codex 风格状态气泡",
   "type": "module",
   "main": "./lib/index.js",
@@ -31,6 +31,9 @@
     "cordis": ">=4.0.0-rc <5",
     "schemastery": "^3.18.0",
     "@deepseek-ai/dsh-client-ui-slots": ">=0.0.1-rc <2"
+  },
+  "optionalDependencies": {
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
