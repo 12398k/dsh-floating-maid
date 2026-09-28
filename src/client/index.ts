@@ -15,7 +15,12 @@
 import * as React from 'react'
 import { useEffect, useRef, useState, useLayoutEffect } from 'react'
 import { FACES, type Face } from './faces.js'
-import { greetTrigger, pickLine, toolTrigger, timeTrigger, segments, plainLength, charDelay, readTimeMs, SPEECH_CSS, type SpeechLine, type Trigger } from './speech.js'
+import { pickLine, fillLine, toolTrigger, timeTrigger, isAskTool, segments, plainLength, charDelay, readTimeMs, SPEECH_CSS, type SpeechLine, type Trigger } from './speech.js'
+import {
+  BLINKABLE, FACE_MANPU, PERSONA_CSS, faceOfLine, lipSync, manpuMarkup, loadMemory, saveMemory, affinity, greetFor, holidayFor, checkIn,
+  newPatience, touch, sulkMs, cameBack, reactToUserText, pickActivity, activityMs, reactionDelay, ACTIVITIES,
+  type Manpu, type Patience, type Memory, type Activity,
+} from './persona.js'
 import { WebPushSettingsSection, IconBell } from './webpush.js'
 
 const PLUGIN_ID = 'whale-girl-pet'
@@ -40,7 +45,7 @@ const IconArrowDownRight = (props: { size?: number; color?: string; className?: 
   React.createElement('svg', {
     className: props.className,
     width: props.size || 14, height: props.size || 14, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#0284c7', strokeWidth: '2.8', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#1f7ae0', strokeWidth: '2.8', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('line', { x1: '7', y1: '7', x2: '17', y2: '17' }),
     React.createElement('polyline', { points: '17 8 17 17 8 17' })
@@ -50,7 +55,7 @@ const IconArrowUpRight = (props: { size?: number; color?: string; className?: st
   React.createElement('svg', {
     className: props.className,
     width: props.size || 14, height: props.size || 14, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#f43f5e', strokeWidth: '2.8', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#e0524f', strokeWidth: '2.8', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('line', { x1: '7', y1: '17', x2: '17', y2: '7' }),
     React.createElement('polyline', { points: '8 7 17 7 17 16' })
@@ -80,7 +85,7 @@ const IconRefresh = (props: { size?: number; color?: string }) =>
 const IconTarget = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#60a5fa', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#1f7ae0', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('circle', { cx: '12', cy: '12', r: '9' }),
     React.createElement('circle', { cx: '12', cy: '12', r: '4' }),
@@ -94,7 +99,7 @@ const IconTarget = (props: { size?: number; color?: string }) =>
 const IconUser = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#38bdf8', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#1f7ae0', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('path', { d: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' }),
     React.createElement('circle', { cx: '12', cy: '7', r: '4' })
@@ -104,7 +109,7 @@ const IconUser = (props: { size?: number; color?: string }) =>
 const IconThink = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#c084fc', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#7c5ce6', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('circle', { cx: '12', cy: '12', r: '2.2', fill: 'currentColor' }),
     React.createElement('ellipse', { cx: '12', cy: '12', rx: '8.5', ry: '3.5', transform: 'rotate(30 12 12)' }),
@@ -116,7 +121,7 @@ const IconThink = (props: { size?: number; color?: string }) =>
 const IconRead = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#38bdf8', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#1f7ae0', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('rect', { x: '4', y: '3', width: '16', height: '18', rx: '3.5' }),
     React.createElement('line', { x1: '8.5', y1: '8.5', x2: '15.5', y2: '8.5' }),
@@ -127,7 +132,7 @@ const IconRead = (props: { size?: number; color?: string }) =>
 const IconWrite = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#fb923c', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#ec7c2a', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('path', { d: 'M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z' }),
     React.createElement('line', { x1: '14', y1: '21', x2: '22', y2: '21' }),
@@ -137,7 +142,7 @@ const IconWrite = (props: { size?: number; color?: string }) =>
 const IconBash = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#fbbf24', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#d98b0c', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('rect', { x: '3', y: '3', width: '18', height: '18', rx: '4' }),
     React.createElement('polyline', { points: '7 9 10 12 7 15' }),
@@ -148,7 +153,7 @@ const IconBash = (props: { size?: number; color?: string }) =>
 const IconSearch = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#a78bfa', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#7c5ce6', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('circle', { cx: '10.5', cy: '10.5', r: '6.5' }),
     React.createElement('line', { x1: '15.5', y1: '15.5', x2: '21', y2: '21' }),
@@ -158,7 +163,7 @@ const IconSearch = (props: { size?: number; color?: string }) =>
 const IconToolCall = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#fbbf24', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#d98b0c', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('path', { d: 'M10 2L12 8L18 10L12 12L10 18L8 12L2 10L8 8Z', fill: 'currentColor', fillOpacity: '0.25' }),
     React.createElement('path', { d: 'M19 14L20 17L23 18L20 19L19 22L18 19L15 18L18 17Z', fill: 'currentColor', fillOpacity: '0.45' }),
@@ -168,7 +173,7 @@ const IconToolCall = (props: { size?: number; color?: string }) =>
 const IconPlugin = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#f472b6', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#e0559a', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('polygon', { points: '12 2 2 7 12 12 22 7 12 2' }),
     React.createElement('polyline', { points: '2 17 12 22 22 17' }),
@@ -179,7 +184,7 @@ const IconPlugin = (props: { size?: number; color?: string }) =>
 const IconMsg = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#38bdf8', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#1f7ae0', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('path', { d: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' }),
   )
@@ -188,7 +193,7 @@ const IconMsg = (props: { size?: number; color?: string }) =>
 const IconDone = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#4ade80', strokeWidth: '2.8', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#22a06b', strokeWidth: '2.8', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('polyline', { points: '20 6 9 17 4 12' }),
   )
@@ -197,7 +202,7 @@ const IconDone = (props: { size?: number; color?: string }) =>
 const IconFailed = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#f87171', strokeWidth: '2.8', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#e0524f', strokeWidth: '2.8', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('line', { x1: '18', y1: '6', x2: '6', y2: '18' }),
     React.createElement('line', { x1: '6', y1: '6', x2: '18', y2: '18' }),
@@ -208,7 +213,7 @@ const IconLoading = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     className: 'dsh-spin',
     width: props.size || 12, height: props.size || 12, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#fbbf24', strokeWidth: '3', strokeLinecap: 'round'
+    fill: 'none', stroke: props.color || '#d98b0c', strokeWidth: '3', strokeLinecap: 'round'
   },
     React.createElement('circle', { cx: '12', cy: '12', r: '9', strokeOpacity: '0.25' }),
     React.createElement('path', { d: 'M12 3a9 9 0 0 1 9 9' }),
@@ -218,10 +223,10 @@ const IconLoading = (props: { size?: number; color?: string }) =>
 const IconCache = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 12, height: props.size || 12, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#34d399', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#22a06b', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('rect', { x: '4', y: '4', width: '16', height: '16', rx: '3' }),
-    React.createElement('path', { d: 'M13 7l-3 5h4l-2 5', strokeWidth: '2', fill: props.color || '#34d399', fillOpacity: '0.35' }),
+    React.createElement('path', { d: 'M13 7l-3 5h4l-2 5', strokeWidth: '2', fill: props.color || '#22a06b', fillOpacity: '0.35' }),
     React.createElement('line', { x1: '9', y1: '1', x2: '9', y2: '4' }),
     React.createElement('line', { x1: '15', y1: '1', x2: '15', y2: '4' }),
     React.createElement('line', { x1: '9', y1: '20', x2: '9', y2: '23' }),
@@ -232,9 +237,9 @@ const IconCache = (props: { size?: number; color?: string }) =>
 const IconCrown = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 11, height: props.size || 11, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#f59e0b', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#d98b0c', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
-    React.createElement('path', { d: 'M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7z', fill: props.color || '#f59e0b', fillOpacity: '0.2' }),
+    React.createElement('path', { d: 'M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7z', fill: props.color || '#d98b0c', fillOpacity: '0.2' }),
     React.createElement('path', { d: 'M3 20h18' })
   )
 
@@ -242,7 +247,7 @@ const IconCrown = (props: { size?: number; color?: string }) =>
 const IconBot = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 11, height: props.size || 11, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#a855f7', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#7c5ce6', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('rect', { x: '4', y: '9', width: '16', height: '12', rx: '3' }),
     React.createElement('circle', { cx: '12', cy: '4', r: '1.5' }),
@@ -255,7 +260,7 @@ const IconBot = (props: { size?: number; color?: string }) =>
 const IconSend = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 12, height: props.size || 12, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#38bdf8', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#1f7ae0', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('line', { x1: '22', y1: '2', x2: '11', y2: '13' }),
     React.createElement('polygon', { points: '22 2 15 22 11 13 2 9 22 2' })
@@ -265,7 +270,7 @@ const IconSend = (props: { size?: number; color?: string }) =>
 const IconImageAttach = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 13, height: props.size || 13, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#94a3b8', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#6b7592', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('rect', { x: '3', y: '3', width: '18', height: '18', rx: '4' }),
     React.createElement('circle', { cx: '8.5', cy: '8.5', r: '1.5' }),
@@ -308,7 +313,7 @@ const IconChevronDown = (props: { size?: number; color?: string }) =>
   )
 
 const IconHeart = (props: { size?: number; color?: string }) =>
-  React.createElement('svg', { width: props.size || 11, height: props.size || 11, viewBox: '0 0 24 24', fill: props.color || '#ff6b9d' },
+  React.createElement('svg', { width: props.size || 11, height: props.size || 11, viewBox: '0 0 24 24', fill: props.color || '#ff5e97' },
     React.createElement('path', { d: 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z' }),
   )
 
@@ -316,7 +321,7 @@ const IconHeart = (props: { size?: number; color?: string }) =>
 const IconModelChip = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 11, height: props.size || 11, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#38bdf8', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#1f7ae0', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('rect', { x: '4', y: '4', width: '16', height: '16', rx: '3' }),
     React.createElement('rect', { x: '9', y: '9', width: '6', height: '6', rx: '1', fill: 'currentColor', fillOpacity: '0.3' }),
@@ -334,7 +339,7 @@ const IconModelChip = (props: { size?: number; color?: string }) =>
 const IconBrain = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 11, height: props.size || 11, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#c084fc', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#7c5ce6', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('path', { d: 'M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-2.04z' }),
     React.createElement('path', { d: 'M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-2.04z' }),
@@ -344,7 +349,7 @@ const IconBrain = (props: { size?: number; color?: string }) =>
 const IconContext = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 11, height: props.size || 11, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#4ade80', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#22a06b', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('path', { d: 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z' }),
     React.createElement('polyline', { points: '3.27 6.96 12 12.01 20.73 6.96' }),
@@ -355,7 +360,7 @@ const IconContext = (props: { size?: number; color?: string }) =>
 const IconLightning = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 10, height: props.size || 10, viewBox: '0 0 24 24',
-    fill: props.color || '#fbbf24', stroke: props.color || '#fbbf24', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: props.color || '#d98b0c', stroke: props.color || '#d98b0c', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('polygon', { points: '13 2 3 14 12 14 11 22 21 10 12 10 13 2' }),
   )
@@ -364,7 +369,7 @@ const IconLightning = (props: { size?: number; color?: string }) =>
 const IconHourglass = (props: { size?: number; color?: string }) =>
   React.createElement('svg', {
     width: props.size || 11, height: props.size || 11, viewBox: '0 0 24 24',
-    fill: 'none', stroke: props.color || '#fb923c', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
+    fill: 'none', stroke: props.color || '#ec7c2a', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round'
   },
     React.createElement('path', { d: 'M5 22h14' }),
     React.createElement('path', { d: 'M5 2h14' }),
@@ -373,23 +378,12 @@ const IconHourglass = (props: { size?: number; color?: string }) =>
   )
 
 const IconActivity = (props: { size?: number; color?: string }) =>
-  React.createElement('svg', { width: props.size || 11, height: props.size || 11, viewBox: '0 0 24 24', fill: 'none', stroke: props.color || '#60a5fa', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round' },
+  React.createElement('svg', { width: props.size || 11, height: props.size || 11, viewBox: '0 0 24 24', fill: 'none', stroke: props.color || '#1f7ae0', strokeWidth: '2.2', strokeLinecap: 'round', strokeLinejoin: 'round' },
     React.createElement('polyline', { points: '22 12 18 12 15 21 9 3 6 12 2 12' }),
   )
 
 // ───────── 表情 ─────────
-// 台词情绪 → 表情帧
-const MOOD_FACE: Record<string, Face> = {
-  happy: 'happy', proud: 'focus', shy: 'shy', guilty: 'shy', pout: 'pout', angry: 'pout',
-  surprised: 'surprised', dizzy: 'surprised', curious: 'think', focus: 'focus',
-  sad: 'sad', nervous: 'sad', hungry: 'sad', worried: 'think', ask: 'think', bored: 'pout',
-  sleepy: 'sleepy', tired: 'sleepy',
-}
-// 睁着眼的表情才眨眼
-const BLINKABLE = new Set<Face>(['neutral', 'shy', 'sad', 'surprised', 'pout', 'think', 'focus'])
-// 漫符：头顶的小符号（问号、汗滴、怒筋、Zzz……）
-type Manpu = 'think' | 'zzz' | 'sweat' | 'bang' | 'vein' | 'sparkle' | 'heart'
-const FACE_MANPU: Partial<Record<Face, Manpu>> = { think: 'think', sleepy: 'zzz', sad: 'sweat', surprised: 'bang', pout: 'vein', happy: 'sparkle' }  // 害羞时点击已有爱心特效，不再叠加
+// 情绪 → 表情 / 眨眼 / 漫符：见 persona.ts（与桌面版共用）
 const facePreload: HTMLImageElement[] = []
 function preloadFaces(): void {
   if (facePreload.length || typeof Image === 'undefined') return
@@ -554,13 +548,14 @@ interface PhaseMeta {
   aura: string
 }
 const PHASE_DICT: Record<Phase, PhaseMeta> = {
-  idle: { text: '待命中', color: '#a0aec0', bg: 'rgba(160, 174, 192, 0.14)', border: 'rgba(160, 174, 192, 0.3)', dot: '#a0aec0', aura: 'rgba(100, 116, 139, 0.2)' },
-  waiting: { text: '等待响应', color: '#60a5fa', bg: 'rgba(96, 165, 250, 0.16)', border: 'rgba(96, 165, 250, 0.38)', dot: '#60a5fa', aura: 'rgba(59, 130, 246, 0.24)' },
-  thinking: { text: '思考中', color: '#c084fc', bg: 'rgba(192, 132, 252, 0.18)', border: 'rgba(192, 132, 252, 0.45)', dot: '#c084fc', aura: 'rgba(168, 85, 247, 0.28)' },
-  review: { text: '整理回复', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.16)', border: 'rgba(56, 189, 248, 0.38)', dot: '#38bdf8', aura: 'rgba(14, 165, 233, 0.24)' },
-  tool: { text: '执行操作', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.18)', border: 'rgba(251, 191, 36, 0.45)', dot: '#fbbf24', aura: 'rgba(245, 158, 11, 0.26)' },
-  done: { text: '已完成', color: '#4ade80', bg: 'rgba(74, 222, 128, 0.18)', border: 'rgba(74, 222, 128, 0.45)', dot: '#4ade80', aura: 'rgba(34, 197, 94, 0.28)' },
-  failed: { text: '出错了', color: '#f87171', bg: 'rgba(248, 113, 113, 0.18)', border: 'rgba(248, 113, 113, 0.45)', dot: '#f87171', aura: 'rgba(239, 68, 68, 0.28)' },
+  // 纸片风配色：胶囊底色偏浅、文字用深一档的同色，能在白纸上看清
+  idle: { text: '待命中', color: '#6b7592', bg: '#f1f3f8', border: 'rgba(38, 50, 79, 0.3)', dot: '#8a93ab', aura: 'rgba(138, 147, 171, 0.22)' },
+  waiting: { text: '等待响应', color: '#1f7ae0', bg: '#e8f1fd', border: 'rgba(31, 122, 224, 0.5)', dot: '#1f7ae0', aura: 'rgba(31, 122, 224, 0.22)' },
+  thinking: { text: '思考中', color: '#7c5ce6', bg: '#efeafd', border: 'rgba(124, 92, 230, 0.5)', dot: '#7c5ce6', aura: 'rgba(124, 92, 230, 0.24)' },
+  review: { text: '整理回复', color: '#1f7ae0', bg: '#e8f1fd', border: 'rgba(31, 122, 224, 0.5)', dot: '#1f7ae0', aura: 'rgba(31, 122, 224, 0.22)' },
+  tool: { text: '执行操作', color: '#d98b0c', bg: '#fff4dc', border: 'rgba(217, 139, 12, 0.55)', dot: '#d98b0c', aura: 'rgba(217, 139, 12, 0.24)' },
+  done: { text: '已完成', color: '#22a06b', bg: '#e6f7ee', border: 'rgba(34, 160, 107, 0.55)', dot: '#22a06b', aura: 'rgba(34, 160, 107, 0.24)' },
+  failed: { text: '出错了', color: '#e0524f', bg: '#fdeaea', border: 'rgba(224, 82, 79, 0.55)', dot: '#e0524f', aura: 'rgba(224, 82, 79, 0.24)' },
 }
 
 function formatTokens(count: number): string {
@@ -899,6 +894,32 @@ function useSmoothStream(targetText: string, isSummary: boolean): string {
 
 // ───────── CSS 样式体系 ─────────
 const CSS = `
+/* =====================================================================
+   鲸鱼娘 · 纸片贴纸风（与台词气泡 .dsh-say 同一套语言）
+   白纸底 + 墨蓝描边 + 贴纸投影；状态色只用在细节（描边、胶囊、光环）
+   ===================================================================== */
+:root, .dsh-maid-widget, .dsh-aether-root, .dsh-aether-drawer, .dsh-maid-summon {
+  --wg-ink: #26324f;
+  --wg-ink-2: #3b4766;
+  --wg-muted: #8a93ab;
+  --wg-paper: #ffffff;
+  --wg-paper-2: #f7f9ff;
+  --wg-paper-3: #eef2fa;
+  --wg-line: rgba(38, 50, 79, 0.16);
+  --wg-line-2: rgba(38, 50, 79, 0.3);
+  --wg-blue: #1f7ae0;   --wg-blue-bg: #e8f1fd;   --wg-blue-line: rgba(31, 122, 224, 0.5);
+  --wg-purple: #7c5ce6; --wg-purple-bg: #efeafd; --wg-purple-line: rgba(124, 92, 230, 0.5);
+  --wg-amber: #d98b0c;  --wg-amber-bg: #fff4dc;  --wg-amber-line: rgba(217, 139, 12, 0.55);
+  --wg-green: #22a06b;  --wg-green-bg: #e6f7ee;  --wg-green-line: rgba(34, 160, 107, 0.55);
+  --wg-red: #e0524f;    --wg-red-bg: #fdeaea;    --wg-red-line: rgba(224, 82, 79, 0.55);
+  --wg-orange: #ec7c2a; --wg-orange-bg: #fff0e3; --wg-orange-line: rgba(236, 124, 42, 0.55);
+  --wg-pink: #ff5e97;   --wg-pink-bg: #ffe9f1;
+  --wg-shadow: 0 3px 0 rgba(38, 50, 79, 0.16), 0 10px 24px rgba(10, 16, 32, 0.18);
+  --wg-shadow-sm: 0 2px 0 rgba(38, 50, 79, 0.14), 0 6px 14px rgba(10, 16, 32, 0.12);
+  --wg-font: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --wg-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
 @keyframes dsh-aether-float {
   0%, 100% { transform: translateY(0px) rotate(0deg); }
   50% { transform: translateY(-3px) rotate(-1deg); }
@@ -919,8 +940,8 @@ const CSS = `
   100% { background-position: 0% 0; }
 }
 @keyframes dsh-aether-dot-pulse {
-  0%, 100% { transform: scale(1); opacity: 1; filter: drop-shadow(0 0 2px currentColor); }
-  50% { transform: scale(1.35); opacity: 0.6; filter: drop-shadow(0 0 6px currentColor); }
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.55; }
 }
 @keyframes dsh-aether-pop-heart {
   0% { opacity: 0; transform: translate(-50%, 0) scale(0.6); }
@@ -944,7 +965,7 @@ const CSS = `
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--wg-font);
   transition: right 0.22s cubic-bezier(0.2, 0.8, 0.25, 1), bottom 0.22s cubic-bezier(0.2, 0.8, 0.25, 1);
 }
 .dsh-maid-widget.dsh-maid-widget--dragging {
@@ -953,43 +974,115 @@ const CSS = `
 .dsh-maid-widget.dsh-maid-widget--dragging .dsh-maid-sprite {
   cursor: grabbing !important;
 }
+
+/* ---- 工作状态卡：和台词气泡同款纸片，尾巴指向她的头顶 ---- */
 .dsh-maid-bubble {
+  --edge: var(--wg-ink);
+  --halo: transparent;
   position: absolute;
   right: 0;
   bottom: 212px;
-  width: 360px;
+  width: 350px;
   max-width: calc(100vw - 48px);
-  padding: 10px 16px 12px 16px;
-  background: linear-gradient(135deg, rgba(26, 30, 42, 0.96) 0%, rgba(15, 17, 24, 0.98) 100%);
-  color: #e8e8ec;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 18px;
-  box-shadow: 0 16px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.12);
-  font-size: 13px;
-  line-height: 1.4;
+  padding: 9px 12px 10px 13px;
+  background: var(--wg-paper);
+  color: var(--wg-ink);
+  border: 2px solid var(--edge);
+  border-radius: 18px 18px 8px 18px;
+  box-shadow: 0 0 0 4px var(--halo), var(--wg-shadow);
+  font: 600 13px/1.4 var(--wg-font);
+  letter-spacing: 0.2px;
   pointer-events: auto;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  gap: 5px;
   box-sizing: border-box;
+  cursor: pointer;
+  text-align: left;
+}
+.dsh-maid-bubble::after,
+.dsh-maid-bubble::before {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.dsh-maid-bubble::after {
+  right: 78px;
+  bottom: -14px;
+  border-left: 8px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 14px solid var(--edge);
+}
+.dsh-maid-bubble::before {
+  right: 81px;
+  bottom: -9px;
+  border-left: 5.5px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 10px solid var(--wg-paper);
+  z-index: 1;
+}
+.dsh-maid-bubble.dsh-maid-bubble--dock-left {
+  border-radius: 18px 18px 18px 8px;
+}
+.dsh-maid-bubble.dsh-maid-bubble--dock-left::after {
+  right: auto; left: 78px;
+  border-left: 10px solid transparent;
+  border-right: 8px solid transparent;
+}
+.dsh-maid-bubble.dsh-maid-bubble--dock-left::before {
+  right: auto; left: 81px;
+  border-left: 7px solid transparent;
+  border-right: 5.5px solid transparent;
 }
 .dsh-maid-bubble__title-row {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding-right: 56px;
+  gap: 7px;
+  padding-right: 84px;
   box-sizing: border-box;
 }
+.dsh-maid-bubble__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 1px 7px 1px 6px;
+  border-radius: 999px;
+  border: 1.5px solid var(--wg-line-2);
+  background: var(--wg-paper-2);
+  color: var(--wg-ink-2);
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.45;
+  white-space: nowrap;
+  transition: background 220ms ease, border-color 220ms ease, color 220ms ease;
+}
+.dsh-maid-bubble__dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.dsh-maid-bubble__pill--waiting,
+.dsh-maid-bubble__pill--review  { background: var(--wg-blue-bg); border-color: var(--wg-blue-line); color: var(--wg-blue); }
+.dsh-maid-bubble__pill--thinking { background: var(--wg-purple-bg); border-color: var(--wg-purple-line); color: var(--wg-purple); }
+.dsh-maid-bubble__pill--tool { background: var(--wg-amber-bg); border-color: var(--wg-amber-line); color: var(--wg-amber); }
+.dsh-maid-bubble__pill--done { background: var(--wg-green-bg); border-color: var(--wg-green-line); color: var(--wg-green); }
+.dsh-maid-bubble__pill--failed { background: var(--wg-red-bg); border-color: var(--wg-red-line); color: var(--wg-red); }
+.dsh-maid-bubble__pill--waiting .dsh-maid-bubble__dot,
+.dsh-maid-bubble__pill--thinking .dsh-maid-bubble__dot,
+.dsh-maid-bubble__pill--review .dsh-maid-bubble__dot,
+.dsh-maid-bubble__pill--tool .dsh-maid-bubble__dot { animation: dsh-aether-dot-pulse 1.6s ease-in-out infinite; }
 .dsh-maid-bubble__title-text {
   flex: 1 1 0;
   min-width: 0;
   font-size: 13px;
-  font-weight: 600;
-  color: #ffffff;
+  font-weight: 700;
+  color: var(--wg-ink);
   line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
@@ -1006,6 +1099,7 @@ const CSS = `
   overflow: hidden;
   white-space: nowrap;
   text-align: left;
+  color: var(--wg-ink-2);
 }
 .dsh-maid-bubble__status.dsh-maid-bubble__status--fade-right {
   mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 32px), transparent 100%);
@@ -1025,53 +1119,47 @@ const CSS = `
   align-items: center;
   transition: transform 260ms cubic-bezier(0.12, 0.78, 0.24, 1);
   will-change: transform;
+  color: var(--wg-ink-2);
 }
+/* 思考 / 等待：一道墨蓝→天蓝的流光从字面扫过 */
 .dsh-maid-bubble__status--thinking .dsh-maid-bubble__ticker,
 .dsh-maid-bubble__status--waiting .dsh-maid-bubble__ticker {
-  color: #e5e7eb;
+  color: var(--wg-ink-2);
   background: linear-gradient(90deg,
-    rgba(160, 165, 175, 0.65) 0%,
-    rgba(175, 180, 192, 0.75) 12%,
-    #ffffff 25%,
-    rgba(175, 180, 192, 0.75) 38%,
-    rgba(160, 165, 175, 0.65) 50%,
-    rgba(175, 180, 192, 0.75) 62%,
-    #ffffff 75%,
-    rgba(175, 180, 192, 0.75) 88%,
-    rgba(160, 165, 175, 0.65) 100%);
-  background-size: 200% 100%;
+    #4b5878 0%, #4b5878 30%, #1f7ae0 42%, #7cc3ff 50%, #1f7ae0 58%, #4b5878 70%, #4b5878 100%);
+  background-size: 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: dsh-aether-shimmer 2.4s linear infinite;
-  filter: drop-shadow(0 0 1px rgba(255,255,255,0.25));
+  animation: dsh-aether-shimmer 2.6s linear infinite;
 }
-.dsh-maid-bubble__status--tool .dsh-maid-bubble__ticker { color: #fbbf24; background: none; -webkit-text-fill-color: #fbbf24; }
-.dsh-maid-bubble__status--review .dsh-maid-bubble__ticker { color: #38bdf8; background: none; -webkit-text-fill-color: #38bdf8; }
-.dsh-maid-bubble__status--done .dsh-maid-bubble__ticker { color: #4ade80; background: none; -webkit-text-fill-color: #4ade80; }
-.dsh-maid-bubble__status--failed .dsh-maid-bubble__ticker { color: #f87171; background: none; -webkit-text-fill-color: #f87171; }
+.dsh-maid-bubble__status--tool .dsh-maid-bubble__ticker { color: var(--wg-amber); background: none; -webkit-text-fill-color: var(--wg-amber); }
+.dsh-maid-bubble__status--review .dsh-maid-bubble__ticker { color: var(--wg-blue); background: none; -webkit-text-fill-color: var(--wg-blue); }
+.dsh-maid-bubble__status--done .dsh-maid-bubble__ticker { color: var(--wg-green); background: none; -webkit-text-fill-color: var(--wg-green); }
+.dsh-maid-bubble__status--failed .dsh-maid-bubble__ticker { color: var(--wg-red); background: none; -webkit-text-fill-color: var(--wg-red); }
 
 .dsh-maid-bubble__actions {
   position: absolute;
-  top: 8px; right: 10px;
+  top: 8px; right: 9px;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 .dsh-maid-bubble__btn {
   width: 22px; height: 22px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #c9cdd4;
+  background: var(--wg-paper);
+  border: 1.5px solid var(--wg-line-2);
+  color: var(--wg-ink-2);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 120ms ease-out;
 }
-.dsh-maid-bubble__btn:hover { color: #fff; background: rgba(255, 255, 255, 0.18); }
+.dsh-maid-bubble__btn:hover { color: var(--wg-blue); background: var(--wg-blue-bg); border-color: var(--wg-blue); }
+.dsh-maid-bubble__btn--pip-active { color: var(--wg-blue); background: var(--wg-blue-bg); border-color: var(--wg-blue); }
 
 .dsh-maid-sprite-box {
   position: absolute;
@@ -1084,7 +1172,7 @@ const CSS = `
   object-fit: contain;
   display: block;
   cursor: grab;
-  filter: drop-shadow(0 8px 18px rgba(0,0,0,0.45));
+  filter: drop-shadow(0 6px 12px rgba(38, 50, 79, 0.28));
   animation: dsh-aether-float 3.2s ease-in-out infinite;
   will-change: transform;
   touch-action: none;
@@ -1094,6 +1182,7 @@ const CSS = `
 }
 .dsh-maid-sprite:active { animation: dsh-aether-jelly 360ms ease-out 1 !important; }
 
+/* 好感计数：粉色小贴纸 */
 .dsh-maid-pat-badge {
   position: absolute;
   top: 8px; right: 8px;
@@ -1101,16 +1190,14 @@ const CSS = `
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 2px 7px;
-  background: rgba(255, 80, 140, 0.22);
-  border: 1px solid rgba(255, 120, 175, 0.45);
+  padding: 1px 7px;
+  background: var(--wg-paper);
+  border: 1.5px solid var(--wg-pink);
   border-radius: 999px;
-  color: #ff7da7;
+  color: var(--wg-pink);
   font-size: 11px;
-  font-weight: 700;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  font-weight: 800;
+  box-shadow: var(--wg-shadow-sm);
   pointer-events: none;
 }
 .dsh-maid-pat-pop {
@@ -1118,63 +1205,47 @@ const CSS = `
   top: 25%; left: 50%;
   transform: translateX(-50%);
   z-index: 3;
-  color: #ff5e97;
+  color: var(--wg-pink);
   font-size: 14px;
   font-weight: 800;
   pointer-events: none;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+  text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 2px 4px rgba(38, 50, 79, 0.25);
   animation: dsh-aether-pop-heart 650ms ease-out forwards;
 }
 
-.dsh-maid-summon {
-  position: fixed;
-  right: 24px; bottom: 24px;
-  z-index: 2147483000;
-  padding: 8px 14px;
-  background: rgba(22, 24, 30, 0.95);
-  color: #e8e8ec;
-  border: 1px solid rgba(130, 140, 160, 0.35);
-  border-radius: 12px;
-  font-size: 12px;
-  cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-  font-family: inherit;
-}
-
-/* ================= 桌面置顶「Aether 灵动悬浮岛」 ================= */
+/* ================= 桌面置顶悬浮窗（画中画） ================= */
 .dsh-aether-root {
   width: 100vw;
   height: 100vh;
   margin: 0;
-  padding: 8px;
+  padding: 10px;
   overflow: hidden;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #090a0f;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--wg-paper-3);
+  font-family: var(--wg-font);
   container-type: size;
   container-name: aetherCard;
 }
 
-/* 核心毛玻璃卡片 */
+/* 主卡片：一张大纸片 */
 .dsh-aether-card {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  padding: 8px 10px;
-  background: linear-gradient(135deg, rgba(24, 28, 40, 0.94) 0%, rgba(13, 15, 23, 0.98) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 18px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  padding: 9px 11px;
+  background: var(--wg-paper);
+  border: 2px solid var(--wg-ink);
+  border-radius: 20px;
+  box-shadow: var(--wg-shadow);
   display: flex;
   overflow: hidden;
   position: relative;
   user-select: none;
   -webkit-user-select: none;
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  color: var(--wg-ink);
 }
 
 /* 顶栏 */
@@ -1189,9 +1260,9 @@ const CSS = `
 .dsh-aether-task-title {
   flex: 1 1 0;
   min-width: 0;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--wg-ink);
   line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
@@ -1210,10 +1281,10 @@ const CSS = `
 .dsh-aether-btn {
   width: 22px;
   height: 22px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #d1d5db;
+  border-radius: 8px;
+  background: var(--wg-paper);
+  border: 1.5px solid var(--wg-line-2);
+  color: var(--wg-ink-2);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1222,11 +1293,12 @@ const CSS = `
   transition: all 140ms ease;
 }
 .dsh-aether-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: #ffffff;
+  background: var(--wg-blue-bg);
+  border-color: var(--wg-blue);
+  color: var(--wg-blue);
 }
 
-/* 轨迹流水线时间轴 (Step Timeline Feed) */
+/* 执行时间轴 */
 .dsh-aether-timeline {
   width: 100%;
   flex: 1 1 0;
@@ -1239,13 +1311,13 @@ const CSS = `
   padding: 2px;
   box-sizing: border-box;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.15) transparent;
+  scrollbar-color: var(--wg-line-2) transparent;
 }
 .dsh-aether-timeline::-webkit-scrollbar {
-  width: 3px;
+  width: 4px;
 }
 .dsh-aether-timeline::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.15);
+  background: var(--wg-line-2);
   border-radius: 3px;
 }
 
@@ -1253,38 +1325,38 @@ const CSS = `
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 7px;
-  background: rgba(0, 0, 0, 0.32);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 7px;
+  padding: 4px 8px;
+  background: var(--wg-paper-2);
+  border: 1.5px solid var(--wg-line);
+  border-radius: 10px;
   font-size: 11px;
-  color: #e2e8f0;
+  color: var(--wg-ink-2);
   box-sizing: border-box;
   animation: dsh-step-in 180ms ease-out;
 }
 .dsh-aether-step-item--user {
-  background: rgba(56, 189, 248, 0.14);
-  border-color: rgba(56, 189, 248, 0.38);
-  color: #f0f9ff;
-  font-weight: 500;
+  background: var(--wg-blue-bg);
+  border-color: var(--wg-blue-line);
+  color: var(--wg-ink);
+  font-weight: 600;
 }
 .dsh-aether-step-item--running {
-  background: rgba(251, 191, 36, 0.14);
-  border-color: rgba(251, 191, 36, 0.4);
-  color: #fde047;
+  background: var(--wg-amber-bg);
+  border-color: var(--wg-amber-line);
+  color: #8a5a00;
 }
 .dsh-aether-step-item--done {
-  border-color: rgba(74, 222, 128, 0.2);
+  border-color: var(--wg-green-line);
 }
 .dsh-aether-step-item--failed {
-  background: rgba(248, 113, 113, 0.14);
-  border-color: rgba(248, 113, 113, 0.4);
-  color: #fca5a5;
+  background: var(--wg-red-bg);
+  border-color: var(--wg-red-line);
+  color: #a8322f;
 }
 .dsh-aether-step-item--queued {
-  background: rgba(251, 146, 60, 0.1);
-  border: 1px dashed rgba(251, 146, 60, 0.45);
-  color: #fed7aa;
+  background: var(--wg-orange-bg);
+  border: 1.5px dashed var(--wg-orange-line);
+  color: #a8531a;
 }
 
 .dsh-aether-step-icon {
@@ -1300,16 +1372,17 @@ const CSS = `
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.35;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: var(--wg-mono);
   font-size: 10.5px;
+  color: inherit;
 }
 .dsh-aether-step-tag {
   font-size: 9.5px;
-  font-weight: 600;
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: rgba(255,255,255,0.08);
-  color: #cbd5e1;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(38, 50, 79, 0.08);
+  color: var(--wg-ink-2);
   flex-shrink: 0;
 }
 .dsh-aether-step-right {
@@ -1322,27 +1395,66 @@ const CSS = `
 }
 .dsh-aether-step-duration {
   font-size: 10px;
-  color: #cbd5e1;
-  font-family: ui-monospace, SFMono-Regular, monospace;
-  font-weight: 500;
+  color: var(--wg-muted);
+  font-family: var(--wg-mono);
+  font-weight: 600;
+}
+
+/* 无任务时的占位贴纸 */
+.dsh-aether-empty {
+  flex: 1 1 auto;
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1.5px dashed var(--wg-line-2);
+  border-radius: 14px;
+  background: var(--wg-paper-2);
+  text-align: center;
+  box-sizing: border-box;
+}
+.dsh-aether-empty__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--wg-paper);
+  border: 1.5px solid var(--wg-line-2);
+  margin-bottom: 2px;
+}
+.dsh-aether-empty--done .dsh-aether-empty__icon { border-color: var(--wg-green-line); background: var(--wg-green-bg); }
+.dsh-aether-empty--failed .dsh-aether-empty__icon { border-color: var(--wg-red-line); background: var(--wg-red-bg); }
+.dsh-aether-empty__title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--wg-ink);
+}
+.dsh-aether-empty__sub {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--wg-muted);
 }
 @keyframes dsh-step-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ================= 4 列全景严格网格对齐双层遥测看板 (零截断) ================= */
+/* ================= 遥测看板 ================= */
 .dsh-aether-telemetry {
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding: 4px 6px;
-  background: rgba(8, 10, 16, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 9px;
+  padding: 5px 6px;
+  background: var(--wg-paper-2);
+  border: 1.5px solid var(--wg-line-2);
+  border-radius: 12px;
   box-sizing: border-box;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.4);
   flex-shrink: 0;
   min-width: 0;
   overflow: hidden;
@@ -1354,6 +1466,7 @@ const CSS = `
   justify-content: space-between;
   gap: 4px;
   min-width: 0;
+  overflow: hidden;
   white-space: nowrap;
 }
 .dsh-aether-stat-pill {
@@ -1361,32 +1474,35 @@ const CSS = `
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: var(--wg-paper);
+  border: 1px solid var(--wg-line);
   font-size: 10px;
-  font-weight: 500;
-  color: #f1f5f9;
-  line-height: 1.25;
+  font-weight: 600;
+  color: var(--wg-ink-2);
+  line-height: 1.3;
   white-space: nowrap;
 }
 .dsh-aether-stat-pill--scope {
   font-size: 9px;
-  font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.14);
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--wg-ink);
+  border-color: var(--wg-ink);
   color: #ffffff;
+  letter-spacing: 0.5px;
 }
 .dsh-aether-stat-pill--hit {
-  background: rgba(52, 211, 153, 0.18);
-  border: 1px solid rgba(52, 211, 153, 0.45);
-  color: #34d399;
-  font-weight: 700;
+  background: var(--wg-green-bg);
+  border: 1px solid var(--wg-green-line);
+  color: var(--wg-green);
+  font-weight: 800;
 }
 .dsh-aether-stat-pill--tokens {
-  color: #93c5fd;
-  font-family: ui-monospace, SFMono-Regular, monospace;
+  color: var(--wg-blue);
+  font-family: var(--wg-mono);
   justify-content: flex-end;
 }
 
@@ -1402,13 +1518,13 @@ const CSS = `
   overflow: hidden;
 }
 
-/* Agent 切换器 (Agent Tabs) */
+/* Agent 切换器 */
 .dsh-aether-agent-tabs {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: var(--wg-paper-2);
+  border: 1.5px solid var(--wg-line-2);
   border-radius: 999px;
   padding: 2px 4px;
   box-sizing: border-box;
@@ -1423,39 +1539,39 @@ const CSS = `
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 999px;
-  border: 1px solid transparent;
+  border: 1.5px solid transparent;
   background: transparent;
-  color: #94a3b8;
+  color: var(--wg-muted);
   font-size: 9.5px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: all 140ms ease;
   white-space: nowrap;
+  font-family: inherit;
 }
 .dsh-aether-agent-tab:hover {
-  color: #f1f5f9;
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--wg-ink);
+  background: rgba(38, 50, 79, 0.06);
 }
 .dsh-aether-agent-tab--active {
-  background: rgba(59, 130, 246, 0.2) !important;
-  border-color: rgba(59, 130, 246, 0.5) !important;
-  color: #60a5fa !important;
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+  background: var(--wg-blue-bg) !important;
+  border-color: var(--wg-blue) !important;
+  color: var(--wg-blue) !important;
 }
 
-/* 状态胶囊轨道 (Status Island) */
+/* 状态胶囊轨道 */
 .dsh-aether-island {
   flex: 1 1 0;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 5px;
-  background: rgba(0, 0, 0, 0.42);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 6px;
+  background: var(--wg-paper-2);
+  border: 1.5px solid var(--wg-line-2);
   border-radius: 999px;
-  padding: 2px 7px 2px 5px;
+  padding: 2px 9px 2px 4px;
   box-sizing: border-box;
   overflow: hidden;
   flex-shrink: 0;
@@ -1463,17 +1579,18 @@ const CSS = `
 .dsh-aether-pill {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 1px 6px;
+  gap: 4px;
+  padding: 1px 7px;
   border-radius: 999px;
   font-size: 9.5px;
-  font-weight: 700;
-  line-height: 1.2;
+  font-weight: 800;
+  line-height: 1.35;
   flex-shrink: 0;
+  transition: background 220ms ease, border-color 220ms ease, color 220ms ease;
 }
 .dsh-aether-pill__dot {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   flex-shrink: 0;
   animation: dsh-aether-dot-pulse 2s ease-in-out infinite;
@@ -1485,10 +1602,11 @@ const CSS = `
   height: 1.35em;
   line-height: 1.35;
   font-size: 10.5px;
-  font-weight: 500;
+  font-weight: 600;
   overflow: hidden;
   white-space: nowrap;
   text-align: left;
+  color: var(--wg-ink-2);
 }
 .dsh-aether-ticker-box.dsh-fade-right {
   mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 18px), transparent 100%);
@@ -1499,19 +1617,24 @@ const CSS = `
   -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 14px, #000 calc(100% - 16px), transparent 100%);
 }
 
-/* ================= 最底部【悬浮窗图文多模态交互输入框】 ================= */
+/* ================= 输入框 ================= */
 .dsh-aether-input-deck {
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  background: rgba(0, 0, 0, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  padding: 3px 6px;
+  background: var(--wg-paper);
+  border: 2px solid var(--wg-ink);
+  border-radius: 14px;
+  padding: 3px 5px;
   box-sizing: border-box;
   flex-shrink: 0;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  box-shadow: var(--wg-shadow-sm);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.dsh-aether-input-deck:focus-within {
+  border-color: var(--wg-blue);
+  box-shadow: 0 0 0 3px var(--wg-blue-bg), var(--wg-shadow-sm);
 }
 .dsh-aether-image-preview-bar {
   display: flex;
@@ -1524,9 +1647,9 @@ const CSS = `
   position: relative;
   width: 26px;
   height: 26px;
-  border-radius: 5px;
+  border-radius: 6px;
   overflow: hidden;
-  border: 1px solid rgba(56, 189, 248, 0.5);
+  border: 1.5px solid var(--wg-blue);
   flex-shrink: 0;
 }
 .dsh-aether-preview-img {
@@ -1538,7 +1661,7 @@ const CSS = `
   position: absolute;
   top: 0; right: 0;
   width: 11px; height: 11px;
-  background: rgba(0, 0, 0, 0.75);
+  background: var(--wg-ink);
   color: #fff;
   border: none;
   font-size: 7px;
@@ -1562,21 +1685,23 @@ const CSS = `
   background: transparent;
   border: none;
   outline: none;
-  color: #ffffff;
-  font-size: 11px;
+  color: var(--wg-ink);
+  font-size: 11.5px;
   font-family: inherit;
+  font-weight: 600;
   line-height: 1.3;
 }
 .dsh-aether-input-field::placeholder {
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--wg-muted);
+  font-weight: 500;
 }
 .dsh-aether-input-btn {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #c9cdd4;
+  border-radius: 8px;
+  background: var(--wg-paper);
+  border: 1.5px solid var(--wg-line-2);
+  color: var(--wg-ink-2);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1586,27 +1711,34 @@ const CSS = `
   transition: all 120ms ease;
 }
 .dsh-aether-input-btn:hover {
-  background: rgba(56, 189, 248, 0.25);
-  color: #38bdf8;
-  border-color: rgba(56, 189, 248, 0.5);
+  background: var(--wg-blue-bg);
+  color: var(--wg-blue);
+  border-color: var(--wg-blue);
 }
 .dsh-aether-input-btn--send {
-  background: rgba(56, 189, 248, 0.2);
-  border-color: rgba(56, 189, 248, 0.4);
-  color: #38bdf8;
+  background: var(--wg-blue);
+  border-color: var(--wg-blue);
+  color: #ffffff;
 }
+.dsh-aether-input-btn--send:hover {
+  background: #1866c0;
+  border-color: #1866c0;
+  color: #ffffff;
+}
+.dsh-aether-input-btn--send svg { stroke: #ffffff; }
 
-/* ================= 最底部全功能底座状态栏 (Model & Effort & Context Deck) ================= */
+/* ================= 底座状态栏 (Model & Effort & Context) ================= */
 .dsh-aether-footer-deck {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 5px;
-  padding: 3px 6px;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  flex-wrap: wrap;
+  gap: 3px 5px;
+  padding: 3px 5px;
+  background: var(--wg-paper-2);
+  border: 1.5px solid var(--wg-line);
+  border-radius: 10px;
   box-sizing: border-box;
   flex-shrink: 0;
   min-height: 22px;
@@ -1614,68 +1746,73 @@ const CSS = `
 .dsh-aether-footer-left {
   display: flex;
   align-items: center;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 3px 4px;
   min-width: 0;
   flex: 1 1 auto;
 }
+.dsh-aether-mini-pill__detail { opacity: 0.8; }
+.dsh-aether-drawer .dsh-aether-mini-pill__detail { display: none; }
 .dsh-aether-footer-right {
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 3px 4px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .dsh-aether-mini-pill {
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 1.5px 5px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 5px;
+  padding: 1.5px 6px;
+  background: var(--wg-paper);
+  border: 1px solid var(--wg-line-2);
+  border-radius: 6px;
   font-size: 9.5px;
-  color: #cbd5e1;
-  line-height: 1.2;
+  font-weight: 700;
+  color: var(--wg-ink-2);
+  line-height: 1.25;
   white-space: nowrap;
-  font-family: ui-monospace, SFMono-Regular, "Segoe UI", sans-serif;
+  font-family: var(--wg-mono);
   cursor: default;
 }
 .dsh-aether-mini-pill--model {
-  background: rgba(56, 189, 248, 0.12);
-  border-color: rgba(56, 189, 248, 0.3);
-  color: #38bdf8;
-  font-weight: 600;
+  background: var(--wg-blue-bg);
+  border-color: var(--wg-blue-line);
+  color: var(--wg-blue);
 }
 .dsh-aether-mini-pill--effort {
-  background: rgba(168, 85, 247, 0.12);
-  border-color: rgba(168, 85, 247, 0.3);
-  color: #c084fc;
-  font-weight: 600;
+  background: var(--wg-purple-bg);
+  border-color: var(--wg-purple-line);
+  color: var(--wg-purple);
 }
 .dsh-aether-mini-pill--context {
-  background: rgba(34, 197, 94, 0.1);
-  border-color: rgba(34, 197, 94, 0.28);
-  color: #4ade80;
+  background: var(--wg-green-bg);
+  border-color: var(--wg-green-line);
+  color: var(--wg-green);
   cursor: pointer;
 }
 .dsh-aether-mini-pill--speed {
-  background: rgba(251, 191, 36, 0.1);
-  border-color: rgba(251, 191, 36, 0.25);
-  color: #fbbf24;
+  background: var(--wg-amber-bg);
+  border-color: var(--wg-amber-line);
+  color: var(--wg-amber);
 }
 
-/* 上下文详细浮动卡片 (Popover 对齐用户截图 2) */
+/* 上下文详情浮动卡片 */
 .dsh-aether-context-popover {
   position: absolute;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%) scale(0.95);
-  background: linear-gradient(135deg, rgba(28, 32, 46, 0.98) 0%, rgba(15, 17, 26, 0.99) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
+  background: var(--wg-paper);
+  border: 2px solid var(--wg-ink);
+  border-radius: 12px;
   padding: 8px 10px;
-  min-width: 180px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.8), 0 0 14px rgba(56, 189, 248, 0.2);
+  min-width: 190px;
+  box-shadow: var(--wg-shadow);
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
@@ -1684,9 +1821,9 @@ const CSS = `
   display: flex;
   flex-direction: column;
   gap: 5px;
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
   text-align: left;
+  color: var(--wg-ink);
+  font-family: var(--wg-font);
 }
 .dsh-aether-mini-pill--context:hover .dsh-aether-context-popover {
   opacity: 1;
@@ -1698,14 +1835,14 @@ const CSS = `
   align-items: center;
   justify-content: space-between;
   font-size: 10.5px;
-  font-weight: 600;
-  color: #f1f5f9;
+  font-weight: 800;
+  color: var(--wg-ink);
 }
 .dsh-aether-ctx-bar-track {
   width: 100%;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 2px;
+  height: 5px;
+  background: rgba(38, 50, 79, 0.12);
+  border-radius: 3px;
   overflow: hidden;
   display: flex;
 }
@@ -1717,8 +1854,9 @@ const CSS = `
   flex-direction: column;
   gap: 3px;
   font-size: 9.5px;
-  color: #cbd5e1;
+  color: var(--wg-ink-2);
   margin-top: 2px;
+  font-weight: 600;
 }
 .dsh-aether-ctx-row {
   display: flex;
@@ -1729,7 +1867,7 @@ const CSS = `
   display: inline-block;
   width: 6px;
   height: 6px;
-  border-radius: 1.5px;
+  border-radius: 2px;
   margin-right: 4px;
 }
 
@@ -1742,9 +1880,9 @@ const CSS = `
   align-items: center;
   gap: 5px;
   padding: 4px 2px;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: var(--wg-paper-2);
+  border: 1.5px solid var(--wg-line-2);
+  border-radius: 12px;
   box-sizing: border-box;
   overflow-y: auto;
   overflow-x: hidden;
@@ -1757,8 +1895,8 @@ const CSS = `
 .dsh-aether-session-rail-title {
   font-size: 7.5px;
   font-weight: 800;
-  color: rgba(255, 255, 255, 0.35);
-  letter-spacing: 0.5px;
+  color: var(--wg-muted);
+  letter-spacing: 0.6px;
   margin-bottom: 2px;
   user-select: none;
 }
@@ -1766,55 +1904,56 @@ const CSS = `
   position: relative;
   width: 26px;
   height: 26px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #94a3b8;
+  border-radius: 8px;
+  background: var(--wg-paper);
+  border: 1.5px solid var(--wg-line-2);
+  color: var(--wg-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   font-size: 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-weight: 700;
+  font-family: var(--wg-mono);
+  font-weight: 800;
   transition: all 140ms ease;
   flex-shrink: 0;
 }
 .dsh-aether-session-btn:hover {
-  background: rgba(56, 189, 248, 0.2);
-  color: #e0f2fe;
-  border-color: rgba(56, 189, 248, 0.4);
+  background: var(--wg-blue-bg);
+  color: var(--wg-blue);
+  border-color: var(--wg-blue-line);
 }
 .dsh-aether-session-btn--active {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.3) 0%, rgba(99, 102, 241, 0.35) 100%);
-  border: 1px solid #38bdf8;
-  color: #ffffff;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.45);
+  background: var(--wg-blue-bg);
+  border: 1.5px solid var(--wg-blue);
+  color: var(--wg-blue);
+  box-shadow: 0 2px 0 rgba(31, 122, 224, 0.25);
 }
 .dsh-aether-session-dot {
   position: absolute;
-  right: -1px;
-  bottom: -1px;
-  width: 6px;
-  height: 6px;
+  right: -2px;
+  bottom: -2px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  border: 1.2px solid #0f1118;
+  border: 1.5px solid #ffffff;
+  box-sizing: content-box;
 }
 
-/* 会话悬浮气泡浮动卡片 (Popover Tooltip) */
+/* 会话悬浮卡片 */
 .dsh-aether-session-popover {
   position: absolute;
-  left: calc(100% + 8px);
+  left: calc(100% + 10px);
   top: 50%;
   transform: translateY(-50%) scale(0.95);
-  background: linear-gradient(135deg, rgba(24, 28, 42, 0.98) 0%, rgba(12, 14, 22, 0.99) 100%);
-  border: 1px solid rgba(56, 189, 248, 0.35);
-  border-radius: 9px;
-  padding: 6px 9px;
-  min-width: 140px;
+  background: var(--wg-paper);
+  border: 2px solid var(--wg-ink);
+  border-radius: 12px;
+  padding: 7px 10px;
+  min-width: 150px;
   max-width: 240px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.75), 0 0 12px rgba(56, 189, 248, 0.2);
+  box-shadow: var(--wg-shadow);
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
@@ -1823,9 +1962,9 @@ const CSS = `
   display: flex;
   flex-direction: column;
   gap: 3px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   text-align: left;
+  color: var(--wg-ink);
+  font-family: var(--wg-font);
 }
 .dsh-aether-session-btn:hover .dsh-aether-session-popover {
   opacity: 1;
@@ -1840,24 +1979,25 @@ const CSS = `
 }
 .dsh-aether-popover-tag {
   font-size: 9.5px;
-  font-weight: 700;
-  color: #38bdf8;
-  font-family: ui-monospace, monospace;
+  font-weight: 800;
+  color: var(--wg-blue);
+  font-family: var(--wg-mono);
 }
 .dsh-aether-popover-status {
   font-size: 8.5px;
-  font-weight: 600;
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--wg-paper-2);
+  border: 1px solid var(--wg-line);
   display: inline-flex;
   align-items: center;
   gap: 3px;
 }
 .dsh-aether-popover-title {
   font-size: 11px;
-  color: #f1f5f9;
-  font-weight: 500;
+  color: var(--wg-ink);
+  font-weight: 600;
   line-height: 1.35;
   word-break: break-word;
   display: -webkit-box;
@@ -1867,8 +2007,9 @@ const CSS = `
 }
 .dsh-aether-popover-footer {
   font-size: 9px;
-  color: #94a3b8;
-  font-family: ui-monospace, monospace;
+  color: var(--wg-muted);
+  font-family: var(--wg-mono);
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1927,13 +2068,37 @@ const CSS = `
   animation: dsh-aether-aura-pulse 3s ease-in-out infinite;
   transition: background 400ms ease;
 }
+/* 画中画里的摸头计数贴纸：固定左下角。用 !important 是为了压过移动端媒体查询里的 top/right 覆盖，
+   否则窄窗口下 top/right + bottom/left 四边同时生效，贴纸会被拉成盖住立绘的大白椭圆 */
+.dsh-aether-avatar-wrapper .dsh-aether-pat-badge.dsh-maid-pat-badge {
+  top: auto !important;
+  right: auto !important;
+  bottom: 6px !important;
+  left: 6px !important;
+  padding: 1px 7px !important;
+  font-size: 11px !important;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+/* 立绘外面套的一层小动作壳（转圈 / 被捏 / 散步动画都打在这层） */
+.dsh-aether-act {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .dsh-aether-sprite {
   position: relative;
   z-index: 1;
   width: 100%;
   height: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 6px 14px rgba(0,0,0,0.5));
+  filter: drop-shadow(0 6px 12px rgba(38, 50, 79, 0.28));
   animation: dsh-aether-float 3.2s ease-in-out infinite;
   touch-action: none;
 }
@@ -2011,15 +2176,51 @@ const CSS = `
 .dsh-aether-card.dsh-mode-tall .dsh-aether-main-col {
   flex: 1 1 0 !important;
   min-height: 0 !important;
+  min-width: 0 !important;
   width: 100% !important;
   height: 100% !important;
   display: flex !important;
   flex-direction: column !important;
   justify-content: space-between !important;
   gap: 5px !important;
+  overflow: hidden !important;
 }
+/* 竖屏：立绘收成顶部小舞台 (随高度伸缩)，太矮时才隐藏 */
 .dsh-aether-card.dsh-mode-tall .dsh-aether-podium {
-  display: none !important;
+  display: flex !important;
+  width: 100% !important;
+  height: clamp(84px, 30cqh, 190px) !important;
+  flex: 0 0 auto !important;
+  overflow: visible !important;
+  justify-content: center !important;
+  background: var(--wg-paper-2);
+  border: 1.5px solid var(--wg-line-2);
+  border-radius: 14px;
+}
+.dsh-aether-card.dsh-mode-tall .dsh-aether-avatar-wrapper {
+  height: 100% !important;
+}
+.dsh-aether-card.dsh-mode-tall .dsh-aether-sprite {
+  height: 100% !important;
+  width: auto !important;
+  max-width: 100%;
+}
+@container aetherCard (max-height: 330px) {
+  .dsh-aether-card.dsh-mode-tall .dsh-aether-podium { display: none !important; }
+}
+/* 窄窗口：收起次要数据，保证不撑破 */
+@container aetherCard (max-width: 760px) {
+  .dsh-aether-mini-pill__detail { display: none !important; }
+}
+.dsh-aether-card.dsh-mode-wide-compact .dsh-aether-stat-pill--tokens { display: none !important; }
+@container aetherCard (max-width: 420px) {
+  .dsh-aether-stat-pill--tokens { display: none !important; }
+  .dsh-aether-mini-pill--speed { display: none !important; }
+  .dsh-aether-agent-tabs { max-width: 38%; }
+}
+@container aetherCard (max-width: 330px) {
+  .dsh-aether-mini-pill--effort { display: none !important; }
+  .dsh-aether-stat-pill--scope { display: none !important; }
 }
 
 /* 4. 极小/极矮窗口 (< 130px 高度) */
@@ -2041,7 +2242,7 @@ const CSS = `
   .dsh-maid-sprite {
     width: 60px !important;
     height: 64px !important;
-    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5)) !important;
+    filter: drop-shadow(0 3px 7px rgba(38, 50, 79, 0.3)) !important;
   }
   .dsh-maid-mobile-aura {
     position: absolute;
@@ -2057,25 +2258,33 @@ const CSS = `
     animation: dsh-aether-aura-pulse 2.8s ease-in-out infinite;
   }
   .dsh-maid-bubble {
-    bottom: 72px !important;
+    bottom: 76px !important;
     right: 0 !important;
     width: auto !important;
-    min-width: 200px !important;
+    min-width: 210px !important;
     max-width: calc(100vw - 28px) !important;
     padding: 7px 10px 8px 11px !important;
-    border-radius: 14px !important;
+    border-radius: 14px 14px 6px 14px !important;
     font-size: 11px !important;
     gap: 3px !important;
-    box-shadow: 0 10px 28px rgba(0,0,0,0.65) !important;
     cursor: pointer !important;
   }
+  .dsh-maid-bubble::after { right: 22px !important; bottom: -12px !important; border-top-width: 12px !important; }
+  .dsh-maid-bubble::before { right: 25px !important; bottom: -8px !important; border-top-width: 9px !important; }
   .dsh-maid-bubble.dsh-maid-bubble--dock-left {
     right: auto !important;
     left: 0 !important;
+    border-radius: 14px 14px 14px 6px !important;
   }
+  .dsh-maid-bubble.dsh-maid-bubble--dock-left::after { right: auto !important; left: 22px !important; }
+  .dsh-maid-bubble.dsh-maid-bubble--dock-left::before { right: auto !important; left: 25px !important; }
   .dsh-maid-bubble__title-row {
-    padding-right: 52px !important;
-    gap: 4px !important;
+    padding-right: 80px !important;
+    gap: 5px !important;
+  }
+  .dsh-maid-bubble__pill {
+    font-size: 9.5px !important;
+    padding: 0 6px 0 5px !important;
   }
   .dsh-maid-bubble__title-text {
     font-size: 11px !important;
@@ -2093,10 +2302,10 @@ const CSS = `
   .dsh-maid-bubble__btn {
     width: 22px !important;
     height: 22px !important;
-    border-radius: 5px !important;
+    border-radius: 7px !important;
   }
   .dsh-maid-pat-badge {
-    padding: 1px 5px !important;
+    padding: 0 5px !important;
     font-size: 9px !important;
     top: -2px !important;
     right: -2px !important;
@@ -2121,13 +2330,13 @@ const CSS = `
   }
 }
 
-/* ================= 全功能移动端 / 页面内控制台抽屉 ================= */
+/* ================= 页面内控制台抽屉（移动端 / 桌面端点开状态卡） ================= */
 .dsh-aether-drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(38, 50, 79, 0.32);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: 2147483620;
   opacity: 0;
   visibility: hidden;
@@ -2149,10 +2358,11 @@ const CSS = `
   height: 88dvh;
   max-height: 94vh;
   max-height: 94dvh;
-  background: linear-gradient(180deg, rgba(22, 26, 38, 0.98) 0%, rgba(10, 12, 18, 0.99) 100%);
-  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  background: var(--wg-paper);
+  border: 2px solid var(--wg-ink);
+  border-bottom: none;
   border-radius: 22px 22px 0 0;
-  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  box-shadow: 0 -8px 30px rgba(10, 16, 32, 0.22);
   z-index: 2147483625;
   display: flex;
   flex-direction: column;
@@ -2165,8 +2375,8 @@ const CSS = `
   visibility: hidden;
   user-select: none;
   -webkit-user-select: none;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
-  color: #e2e8f0;
+  font-family: var(--wg-font);
+  color: var(--wg-ink);
   overflow: hidden;
   overscroll-behavior: contain;
 }
@@ -2184,8 +2394,8 @@ const CSS = `
     width: 480px;
     height: 84vh;
     border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85);
+    border: 2px solid var(--wg-ink);
+    box-shadow: var(--wg-shadow);
     transform: translateY(30px) scale(0.96);
     opacity: 0;
     visibility: hidden;
@@ -2202,9 +2412,10 @@ const CSS = `
   width: 38px;
   height: 4px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.28);
+  background: var(--wg-line-2);
   margin: 2px auto 4px auto;
   flex-shrink: 0;
+  cursor: pointer;
 }
 
 .dsh-aether-drawer-header {
@@ -2219,36 +2430,37 @@ const CSS = `
 .dsh-aether-drawer-title-box {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   flex: 1 1 0;
   min-width: 0;
 }
 
 .dsh-aether-mini-avatar {
   position: relative;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--wg-paper-2);
+  border: 1.5px solid var(--wg-ink);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   cursor: pointer;
+  overflow: hidden;
 }
 .dsh-aether-mini-avatar-img {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
 }
 
 .dsh-aether-drawer-title {
   flex: 1 1 0;
   min-width: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--wg-ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2274,31 +2486,32 @@ const CSS = `
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2.5px 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 2.5px 9px;
+  background: var(--wg-paper);
+  border: 1.5px solid var(--wg-line-2);
   border-radius: 999px;
-  color: #cbd5e1;
+  color: var(--wg-ink-2);
   font-size: 10px;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
   transition: all 120ms ease;
 }
 .dsh-aether-session-chip:hover {
-  background: rgba(56, 189, 248, 0.15);
-  color: #e0f2fe;
+  background: var(--wg-blue-bg);
+  color: var(--wg-blue);
+  border-color: var(--wg-blue-line);
 }
 .dsh-aether-session-chip--active {
-  background: rgba(56, 189, 248, 0.22) !important;
-  border-color: rgba(56, 189, 248, 0.55) !important;
-  color: #38bdf8 !important;
-  font-weight: 600;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+  background: var(--wg-blue-bg) !important;
+  border-color: var(--wg-blue) !important;
+  color: var(--wg-blue) !important;
+  font-weight: 800;
 }
 .dsh-aether-chip-num {
-  font-family: ui-monospace, SFMono-Regular, monospace;
-  font-weight: 700;
+  font-family: var(--wg-mono);
+  font-weight: 800;
 }
 .dsh-aether-chip-text {
   max-width: 120px;
@@ -2322,7 +2535,7 @@ const CSS = `
   pointer-events: auto !important;
 }
 
-/* ================= 悬浮窗动效美学 (motion pass：入场 / 拍头 / 相位呼吸 / 拖拽倾斜) ================= */
+/* ================= 动效 (入场 / 拍头 / 相位呼吸 / 拖拽倾斜) ================= */
 @keyframes dsh-maid-enter {
   from { opacity: 0; transform: translateY(16px) scale(0.92); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -2362,34 +2575,28 @@ const CSS = `
 
 /* 挂件入场：弹簧上浮 */
 .dsh-maid-widget { animation: dsh-maid-enter 480ms cubic-bezier(0.2, 0.9, 0.25, 1.04); }
-/* 气泡入场：滞后 70ms 跟随 */
+/* 状态卡入场：滞后 70ms 跟随 */
 .dsh-maid-bubble {
   animation: dsh-maid-bubble-in 420ms cubic-bezier(0.2, 0.9, 0.25, 1) 70ms backwards;
   transition: border-color 300ms ease, box-shadow 300ms ease;
 }
 
-/* 气泡相位辉光：边框与光晕随状态呼吸 */
-.dsh-maid-widget[data-phase="thinking"] .dsh-maid-bubble {
-  border-color: rgba(192, 132, 252, 0.5);
-  box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(168, 85, 247, 0.22), inset 0 1px 0 rgba(255,255,255,0.12);
-}
-.dsh-maid-widget[data-phase="tool"] .dsh-maid-bubble {
-  border-color: rgba(251, 191, 36, 0.5);
-  box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(251, 191, 36, 0.2), inset 0 1px 0 rgba(255,255,255,0.12);
-}
+/* 状态卡描边随相位换色，外圈一层淡淡的同色光环 */
+.dsh-maid-widget[data-phase="thinking"] .dsh-maid-bubble { --edge: var(--wg-purple); --halo: var(--wg-purple-bg); }
+.dsh-maid-widget[data-phase="tool"] .dsh-maid-bubble { --edge: var(--wg-amber); --halo: var(--wg-amber-bg); }
 .dsh-maid-widget[data-phase="waiting"] .dsh-maid-bubble,
-.dsh-maid-widget[data-phase="review"] .dsh-maid-bubble {
-  border-color: rgba(56, 189, 248, 0.5);
-  box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(56, 189, 248, 0.22), inset 0 1px 0 rgba(255,255,255,0.12);
-}
-.dsh-maid-widget[data-phase="done"] .dsh-maid-bubble {
-  border-color: rgba(74, 222, 128, 0.5);
-  box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(74, 222, 128, 0.2), inset 0 1px 0 rgba(255,255,255,0.12);
-}
-.dsh-maid-widget[data-phase="failed"] .dsh-maid-bubble {
-  border-color: rgba(248, 113, 113, 0.5);
-  box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(248, 113, 113, 0.22), inset 0 1px 0 rgba(255,255,255,0.12);
-}
+.dsh-maid-widget[data-phase="review"] .dsh-maid-bubble { --edge: var(--wg-blue); --halo: var(--wg-blue-bg); }
+.dsh-maid-widget[data-phase="done"] .dsh-maid-bubble { --edge: var(--wg-green); --halo: var(--wg-green-bg); }
+.dsh-maid-widget[data-phase="failed"] .dsh-maid-bubble { --edge: var(--wg-red); --halo: var(--wg-red-bg); }
+
+/* 悬浮窗大卡片描边同样跟随相位 */
+.dsh-aether-card[data-phase="thinking"] { border-color: var(--wg-purple); }
+.dsh-aether-card[data-phase="tool"] { border-color: var(--wg-amber); }
+.dsh-aether-card[data-phase="waiting"],
+.dsh-aether-card[data-phase="review"] { border-color: var(--wg-blue); }
+.dsh-aether-card[data-phase="done"] { border-color: var(--wg-green); }
+.dsh-aether-card[data-phase="failed"] { border-color: var(--wg-red); }
+.dsh-aether-card { transition: border-color 300ms ease; }
 
 /* 精灵状态：忙碌时呼吸加快，完成时开心蹦跶（静止姿态与浮动画一致，切换无跳变） */
 .dsh-maid-widget[data-phase="tool"] .dsh-maid-sprite,
@@ -2428,7 +2635,7 @@ const CSS = `
 /* 状态文案切换：淡入上浮 */
 .dsh-maid-status-swap { animation: dsh-maid-status-in 220ms ease-out; }
 
-/* 画中画卡片入场 + 内容 cascade */
+/* 悬浮窗卡片入场 + 内容 cascade */
 .dsh-aether-card { animation: dsh-card-in 380ms cubic-bezier(0.2, 0.9, 0.25, 1); }
 .dsh-aether-header { animation: dsh-rise-in 420ms cubic-bezier(0.2, 0.9, 0.25, 1) 40ms backwards; }
 .dsh-aether-status-bar { animation: dsh-rise-in 420ms cubic-bezier(0.2, 0.9, 0.25, 1) 90ms backwards; }
@@ -2437,33 +2644,34 @@ const CSS = `
 .dsh-aether-input-deck { animation: dsh-rise-in 420ms cubic-bezier(0.2, 0.9, 0.25, 1) 240ms backwards; }
 .dsh-aether-footer-deck { animation: dsh-rise-in 420ms cubic-bezier(0.2, 0.9, 0.25, 1) 290ms backwards; }
 
-/* 召唤按钮：玻璃质感 + 悬停上浮 + 按压缩放 + 入场 */
+/* 召唤按钮：白纸胶囊 + 墨蓝描边 */
 .dsh-maid-summon {
   position: fixed;
   right: 24px; bottom: 24px;
   z-index: 2147483000;
-  padding: 9px 16px;
-  background: linear-gradient(180deg, rgba(38, 42, 54, 0.96) 0%, rgba(20, 22, 29, 0.96) 100%);
-  color: #e8e8ec;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 8px 16px;
+  background: var(--wg-paper);
+  color: var(--wg-ink);
+  border: 2px solid var(--wg-ink);
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 800;
   letter-spacing: 0.02em;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12);
-  font-family: inherit;
-  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, color 160ms ease;
+  box-shadow: var(--wg-shadow-sm);
+  font-family: var(--wg-font);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, color 160ms ease, background 160ms ease;
   animation: dsh-maid-summon-in 380ms cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards;
 }
 .dsh-maid-summon:hover {
   transform: translateY(-1px);
-  border-color: rgba(56, 189, 248, 0.5);
-  color: #ffffff;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 14px rgba(56, 189, 248, 0.25), inset 0 1px 0 rgba(255,255,255,0.14);
+  border-color: var(--wg-blue);
+  color: var(--wg-blue);
+  background: var(--wg-blue-bg);
+  box-shadow: var(--wg-shadow);
 }
 .dsh-maid-summon:active { transform: translateY(0) scale(0.95); }
-.dsh-maid-summon:focus-visible { outline: 2px solid rgba(56, 189, 248, 0.7); outline-offset: 2px; }
+.dsh-maid-summon:focus-visible { outline: 2px solid var(--wg-blue); outline-offset: 2px; }
 
 /* 全按钮按压反馈 + 键盘焦点环 */
 .dsh-maid-bubble__btn:active,
@@ -2477,7 +2685,7 @@ const CSS = `
 .dsh-aether-session-btn:focus-visible,
 .dsh-aether-session-chip:focus-visible,
 .dsh-aether-input-btn:focus-visible,
-.dsh-aether-agent-tab:focus-visible { outline: 2px solid rgba(56, 189, 248, 0.7); outline-offset: 1px; }
+.dsh-aether-agent-tab:focus-visible { outline: 2px solid var(--wg-blue); outline-offset: 1px; }
 
 /* 尊重系统减弱动效偏好 */
 @media (prefers-reduced-motion: reduce) {
@@ -2486,9 +2694,8 @@ const CSS = `
   .dsh-aether-aura,
   .dsh-maid-mobile-aura,
   .dsh-maid-bubble__ticker,
-  .dsh-aether-pill__dot,
-  .dsh-maid-speech-bubble,
-  .dsh-arrow-accent { animation: none !important; }
+  .dsh-maid-bubble__dot,
+  .dsh-aether-pill__dot { animation: none !important; }
   .dsh-maid-widget,
   .dsh-maid-bubble,
   .dsh-aether-card,
@@ -2500,265 +2707,6 @@ const CSS = `
   .dsh-aether-input-deck,
   .dsh-aether-footer-deck,
   .dsh-maid-status-swap { animation-duration: 0.01ms !important; animation-delay: 0s !important; }
-}
-
-/* ================= 鲸鱼娘经典表情包对话气泡 (Speech Bubble) ================= */
-@keyframes dsh-speech-pop {
-  0% {
-    opacity: 0;
-    transform: scale(0.62) translateY(14px) rotate(-3deg);
-  }
-  65% {
-    opacity: 1;
-    transform: scale(1.05) translateY(-3px) rotate(1deg);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0) rotate(0deg);
-  }
-}
-@keyframes dsh-speech-fadeout {
-  0% { opacity: 1; transform: scale(1) translateY(0); }
-  100% { opacity: 0; transform: scale(0.85) translateY(-8px); }
-}
-@keyframes dsh-arrow-bounce {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(3px, 3px); }
-}
-@keyframes dsh-arrow-bounce-up {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(3px, -3px); }
-}
-
-.dsh-maid-speech-bubble {
-  position: absolute;
-  z-index: 2147483015;
-  min-width: 140px;
-  max-width: 230px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 249, 255, 0.99) 100%);
-  color: #0f172a;
-  border: 2px solid #38bdf8;
-  border-radius: 16px 16px 4px 16px;
-  padding: 8px 12px 9px 12px;
-  box-shadow: 0 12px 32px rgba(14, 165, 233, 0.3), 0 4px 14px rgba(0, 0, 0, 0.2), inset 0 1px 0 #ffffff;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  cursor: pointer;
-  pointer-events: auto;
-  user-select: none;
-  -webkit-user-select: none;
-  box-sizing: border-box;
-  animation: dsh-speech-pop 320ms cubic-bezier(0.18, 1.25, 0.35, 1) forwards;
-  transition: box-shadow 200ms ease, border-color 200ms ease, transform 160ms ease;
-  text-align: left;
-}
-.dsh-maid-speech-bubble:hover {
-  border-color: #0284c7;
-  box-shadow: 0 16px 36px rgba(14, 165, 233, 0.42), 0 6px 16px rgba(0, 0, 0, 0.22);
-  transform: translateY(-2px);
-}
-.dsh-maid-speech-bubble:active {
-  transform: scale(0.96);
-}
-.dsh-maid-speech-bubble--fading {
-  animation: dsh-speech-fadeout 260ms cubic-bezier(0.4, 0, 1, 1) forwards !important;
-  pointer-events: none;
-}
-
-/* 挂件模式下默认在精灵左侧/左上方展开 */
-.dsh-maid-speech-bubble--dock-right {
-  bottom: 140px;
-  right: 105px;
-  border-radius: 16px 16px 4px 16px;
-}
-.dsh-maid-speech-bubble--dock-right::after {
-  content: '';
-  position: absolute;
-  bottom: 10px;
-  right: -9px;
-  width: 0;
-  height: 0;
-  border-top: 7px solid transparent;
-  border-bottom: 7px solid transparent;
-  border-left: 10px solid #38bdf8;
-}
-.dsh-maid-speech-bubble--dock-right::before {
-  content: '';
-  position: absolute;
-  bottom: 11px;
-  right: -6px;
-  width: 0;
-  height: 0;
-  border-top: 6px solid transparent;
-  border-bottom: 6px solid transparent;
-  border-left: 8px solid #f0f9ff;
-  z-index: 1;
-}
-
-/* 挂件在屏幕左侧时，气泡向右展开 */
-.dsh-maid-speech-bubble--dock-left {
-  bottom: 140px;
-  left: 105px;
-  border-radius: 16px 16px 16px 4px;
-}
-.dsh-maid-speech-bubble--dock-left::after {
-  content: '';
-  position: absolute;
-  bottom: 10px;
-  left: -9px;
-  width: 0;
-  height: 0;
-  border-top: 7px solid transparent;
-  border-bottom: 7px solid transparent;
-  border-right: 10px solid #38bdf8;
-}
-.dsh-maid-speech-bubble--dock-left::before {
-  content: '';
-  position: absolute;
-  bottom: 11px;
-  left: -6px;
-  width: 0;
-  height: 0;
-  border-top: 6px solid transparent;
-  border-bottom: 6px solid transparent;
-  border-right: 8px solid #f0f9ff;
-  z-index: 1;
-}
-
-/* 画中画 (PiP) 模式下的气泡 */
-.dsh-maid-speech-bubble--pip {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 90%;
-  max-width: 250px;
-  border-radius: 16px 16px 16px 4px;
-}
-.dsh-maid-speech-bubble--pip::after {
-  content: '';
-  position: absolute;
-  bottom: -9px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-top: 10px solid #38bdf8;
-}
-.dsh-maid-speech-bubble--pip::before {
-  content: '';
-  position: absolute;
-  bottom: -6px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 8px solid #f0f9ff;
-  z-index: 1;
-}
-
-/* 气泡顶栏 (Tag + Close) */
-.dsh-speech-header {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-.dsh-speech-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 10px;
-  font-weight: 700;
-  color: #0284c7;
-  background: rgba(56, 189, 248, 0.16);
-  padding: 1.5px 6px;
-  border-radius: 999px;
-  border: 1px solid rgba(56, 189, 248, 0.35);
-  line-height: 1.2;
-}
-.dsh-speech-close-btn {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  font-size: 14px;
-  line-height: 1;
-  padding: 0 2px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 120ms ease;
-}
-.dsh-speech-close-btn:hover {
-  color: #ef4444;
-}
-
-/* 气泡正文 */
-.dsh-speech-text {
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1.45;
-  color: #0f172a;
-  word-break: break-word;
-  margin-bottom: 2px;
-}
-
-/* 箭头高亮弹跳动效 (纯 SVG 矢量) */
-.dsh-arrow-accent {
-  display: inline-block;
-  vertical-align: -2px;
-  margin-left: 3px;
-  animation: dsh-arrow-bounce 1s ease-in-out infinite;
-  filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.5));
-}
-.dsh-arrow-accent--up {
-  animation: dsh-arrow-bounce-up 1s ease-in-out infinite;
-  filter: drop-shadow(0 0 3px rgba(244, 63, 94, 0.5));
-}
-
-/* 底部轻提示 */
-.dsh-speech-hint {
-  font-size: 9px;
-  color: #94a3b8;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 3px;
-  margin-top: 3px;
-  font-weight: 500;
-}
-
-/* 移动端气泡自适应 */
-@media (max-width: 768px) {
-  .dsh-maid-speech-bubble--dock-right {
-    bottom: 52px;
-    right: 68px;
-    min-width: 130px;
-    max-width: 190px;
-    padding: 6px 9px 7px 9px;
-    border-radius: 12px 12px 3px 12px;
-  }
-  .dsh-maid-speech-bubble--dock-left {
-    bottom: 52px;
-    left: 68px;
-    min-width: 130px;
-    max-width: 190px;
-    padding: 6px 9px 7px 9px;
-    border-radius: 12px 12px 12px 3px;
-  }
-  .dsh-speech-text {
-    font-size: 11.5px;
-  }
-  .dsh-speech-tag {
-    font-size: 9px;
-    padding: 1px 5px;
-  }
 }
 `
 
@@ -2883,7 +2831,7 @@ async function togglePiP(): Promise<boolean> {
           width: 100vw;
           height: 100vh;
           overflow: hidden;
-          background: #090a0f;
+          background: #eef2fa;
         }
         ${CSS}
         ${SPEECH_CSS}
@@ -2933,7 +2881,7 @@ async function togglePiP(): Promise<boolean> {
       const pipCustomStyle = popup.document.createElement('style')
       pipCustomStyle.textContent = `
         html, body {
-          margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #090a0f;
+          margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: #eef2fa;
         }
         ${CSS}
         ${SPEECH_CSS}
@@ -3025,6 +2973,19 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
   const dozingRef = useRef(false)
   const lookRef = useRef<HTMLDivElement | null>(null)
   const dragStartRef = useRef<() => void>(() => {})
+  // 人格层：耐心值（摸太多会跑）、长期记忆（好感度）、日常小动作
+  const patienceRef = useRef<Patience>(newPatience())
+  const memRef = useRef<Memory>(loadMemory())
+  type AwayState = 'none' | 'fleeing' | 'away' | 'returning'
+  const [away, setAway] = useState<AwayState>('none')
+  const awayRef = useRef<AwayState>('none')
+  const awayDirRef = useRef<'left' | 'right'>('right')
+  const awayTimersRef = useRef<NodeJS.Timeout[]>([])
+  const [activity, setActivity] = useState<Activity | null>(null)
+  const activityRef = useRef<Activity | null>(null)
+  const activityTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const recentActsRef = useRef<string[]>([])
+  const lastDoneAtRef = useRef(0)
   const react = (f: Face, ms: number): void => {
     if (reactTimerRef.current) clearTimeout(reactTimerRef.current)
     setReactFace(f)
@@ -3112,9 +3073,21 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     setReady(true)
   }, [isPiP])
 
+  // 画中画一打开，她先感叹一句
+  useEffect(() => {
+    if (!isPiP) return
+    const t = setTimeout(() => say('pipOn', { force: true }), 1200)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPiP])
+
   useEffect(() => {
     const onHiddenChange = (e: any): void => setHidden(!!e.detail?.hidden)
-    const onPipChange = (e: any): void => setPipActive(!!e.detail?.active)
+    const onPipChange = (e: any): void => {
+      const active = !!e.detail?.active
+      setPipActive(active)
+      if (!active && !isPiP) setTimeout(() => say('pipOff', { minGapMs: 3000 }), 700)
+    }
     const onWebSessionChange = (e: any): void => {
       const sid = e.detail?.sessionId
       if (sid && sid !== activeSessionId) {
@@ -3194,6 +3167,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
 
   const handleSelectSession = (sid: string, triggerWebOpen = false) => {
     if (!sid) return
+    if (triggerWebOpen && sid !== currentSelectedSessionId && Math.random() < 0.5) setTimeout(() => say('sessionSwitch', { minGapMs: 20000 }), 250)
     currentSelectedSessionId = sid
     setActiveSessionId(sid)
     setSelectedAgentId('main')
@@ -3292,11 +3266,13 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
       }, 220)
     }, readTimeMs(line.text, line.kind))
   }
-  const say = (trigger: Trigger, opts: { force?: boolean; minGapMs?: number } = {}): void => {
+  const AWAY_OK = new Set<Trigger>(['runAway', 'sulkPeek', 'coax', 'comeBack', 'needYou', 'patWarn'])
+  const say = (trigger: Trigger, opts: { force?: boolean; minGapMs?: number; vars?: Record<string, string | number> } = {}): void => {
     const now = Date.now()
+    if (awayRef.current !== 'none' && !AWAY_OK.has(trigger)) return  // 跑开生闷气时不接话
     if (!opts.force && now - lastSpeakRef.current < (opts.minGapMs ?? 0)) return
     lastSpeakRef.current = now
-    const line = pickLine(trigger)
+    const line = fillLine(pickLine(trigger), opts.vars)
     setCurrentQuote(line)
     setQuoteKey(k => k + 1)
     setSpeechVisible(true)
@@ -3331,13 +3307,128 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     setTimeout(() => setFx(list => list.filter(it => !ids.has(it.id))), 1500)
   }
 
-  // 摸头：连续摸会越来越不耐烦（「好模型……」混在普通台词里随机抽到）
-  const showNextQuote = (): void => {
+  // ───── 小动作：哼歌、伸懒腰、偷吃……（有持续时间，表情和动作一起）─────
+  const stopActivity = (): void => {
+    if (activityTimerRef.current) { clearTimeout(activityTimerRef.current); activityTimerRef.current = null }
+    if (activityRef.current) { activityRef.current = null; setActivity(null) }
+  }
+  const startActivity = (a: Activity): void => {
+    stopActivity()
+    activityRef.current = a
+    setActivity(a)
+    recentActsRef.current = recentActsRef.current.concat(a.id).slice(-4)
+    if (Math.random() < 0.75) say(a.trigger, { minGapMs: 20000 })
+    activityTimerRef.current = setTimeout(() => {
+      stopActivity()
+      if (a.id === 'stroll' && Math.random() < 0.6) say('strollBack', { minGapMs: 6000 })
+    }, activityMs(a))
+  }
+
+  // ───── 滚轮在她身上滚 → 转圈圈（10 秒内转 3 次以上会晕 + 生气）─────
+  const [spinClass, setSpinClass] = useState('')
+  const spinTimesRef = useRef<number[]>([])
+  const spinTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const onWheelSprite = (e: React.WheelEvent): void => {
+    if (awayRef.current !== 'none' || Math.abs(e.deltaY) < 4) return
+    const now = Date.now()
+    if (spinTimerRef.current) return   // 正在转，忽略
+    spinTimesRef.current = spinTimesRef.current.filter(t => now - t < 10000).concat(now)
+    wake(true)
+    stopActivity()
+    const many = spinTimesRef.current.length >= 3
+    setSpinClass(many ? 'wg-act--spin-many' : 'wg-act--spin')
+    spinTimerRef.current = setTimeout(() => { spinTimerRef.current = null; setSpinClass('') }, many ? 1650 : 760)
+    react(many ? 'dizzy' : 'surprised', many ? 3200 : 1400)
+    if (many) { spinTimesRef.current = []; patienceRef.current = { ...patienceRef.current, value: Math.max(0, patienceRef.current.value - 25) } }
+    setTimeout(() => say(many ? 'spunMany' : 'spun', { force: true }), many ? 900 : 500)
+  }
+
+  // ───── 长按捏住不放：0.65 秒后被捏扁开始抗议，2.6 秒还不放就生气 ─────
+  const [squeezing, setSqueezing] = useState(false)
+  const squeezeRef = useRef<{ t1: NodeJS.Timeout | null; t2: NodeJS.Timeout | null; on: boolean; x: number; y: number }>({ t1: null, t2: null, on: false, x: 0, y: 0 })
+  const suppressClickRef = useRef(false)
+  const squeezeStart = (x: number, y: number): void => {
+    squeezeEnd(false)
+    if (awayRef.current !== 'none') return
+    const q = squeezeRef.current
+    q.x = x; q.y = y; q.on = false
+    q.t1 = setTimeout(() => {
+      q.on = true
+      setSqueezing(true)
+      wake(false); stopActivity()
+      react('pout', 4000)
+      say('squeezed', { force: true })
+      q.t2 = setTimeout(() => { react('angry', 3000); say('squeezeLong', { force: true }); patienceRef.current = { ...patienceRef.current, value: Math.max(0, patienceRef.current.value - 20) } }, 2600)
+    }, 650)
+  }
+  const squeezeMove = (x: number, y: number): void => {
+    const q = squeezeRef.current
+    if (!q.t1 && !q.on) return
+    if (Math.abs(x - q.x) + Math.abs(y - q.y) > 8) squeezeEnd(false)   // 是拖动，不是捏
+  }
+  const squeezeEnd = (released: boolean): void => {
+    const q = squeezeRef.current
+    if (q.t1) { clearTimeout(q.t1); q.t1 = null }
+    if (q.t2) { clearTimeout(q.t2); q.t2 = null }
+    if (q.on) {
+      q.on = false
+      setSqueezing(false)
+      if (released) { suppressClickRef.current = true; setTimeout(() => { suppressClickRef.current = false }, 400); react('shy', 1500) }
+    }
+  }
+
+  // ───── 摸太多会跑：蓄力 → 冲出屏幕 → 躲在边上偷看 → 自己回来 / 被你哄回来 ─────
+  const setAwayState = (st: AwayState): void => { awayRef.current = st; setAway(st) }
+  const clearAwayTimers = (): void => { awayTimersRef.current.forEach(clearTimeout); awayTimersRef.current = [] }
+  const later = (fn: () => void, ms: number): void => { awayTimersRef.current.push(setTimeout(fn, ms)) }
+  const comeBack = (coaxed: boolean): void => {
+    if (awayRef.current !== 'away') return
+    clearAwayTimers()
+    setAwayState('returning')
+    patienceRef.current = cameBack(patienceRef.current)
+    later(() => {
+      setAwayState('none')
+      lastActivityRef.current = Date.now()
+      react(coaxed ? 'shy' : 'hmph', 2600)
+      say('comeBack', { force: true })
+    }, 1100)
+  }
+  const runAway = (): void => {
+    stopActivity()
+    clearAwayTimers()
+    awayDirRef.current = (typeof window !== 'undefined' && pos.right > window.innerWidth / 2) ? 'left' : 'right'
+    setAwayState('fleeing')
+    memRef.current = { ...memRef.current, runs: memRef.current.runs + 1 }
+    saveMemory(memRef.current)
+    later(() => { setAwayState('away'); hideQuote() }, 950)
+    later(() => say('sulkPeek', { force: true }), 6500 + Math.random() * 5000)
+    later(() => comeBack(false), sulkMs(affinity(memRef.current)))
+  }
+  const onPeekClick = (): void => {
+    if (awayRef.current !== 'away') return
+    playPress()
+    clearAwayTimers()
+    say('coax', { force: true })
+    later(() => comeBack(true), 1600)
+  }
+
+  // 摸头（点脑袋）/ 戳（点身体）：耐心值决定反应——害羞 → 嫌弃 → 生气 → 警告 → 跑开
+  const touchPet = (where: 'head' | 'body'): void => {
     const now = Date.now()
     patBurstRef.current = patBurstRef.current.filter(t => now - t < 6000).concat(now)
-    const n = patBurstRef.current.length
     lastClickRef.current = now
-    say(n >= 7 ? 'patTooMuch' : n >= 4 ? 'patMany' : 'pat', { force: true })
+    stopActivity()
+    const r = touch(patienceRef.current, where, affinity(memRef.current), now)
+    patienceRef.current = r.next
+    if (where === 'head') { memRef.current = { ...memRef.current, pats: memRef.current.pats + 1 }; saveMemory(memRef.current) }
+    let trig: Trigger = r.trigger
+    let flee = r.flee
+    if (flee && isPiP) { flee = false; trig = 'patTooMuch'; patienceRef.current = { ...r.next, value: 35 } }  // 画中画里没地方跑
+    const busy = phase === 'thinking' || phase === 'tool' || phase === 'review'
+    if (trig === 'pat' && busy && Math.random() < 0.6) trig = 'patBusy'
+    react(r.face, r.faceMs)
+    say(trig, { force: true })
+    if (flee) runAway()
   }
 
   // ───── 让她「看情况说话」：跟着任务状态、时间和你的动作开口 ─────
@@ -3377,7 +3468,16 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
       lastUserInputRef.current = userInput
       wake(false)
       lastActivityRef.current = Date.now()
-      if (Math.random() < 0.7) say('userSend', { minGapMs: 4000 })
+      stopActivity()
+      const heard = reactToUserText(userInput)
+      if (awayRef.current === 'away') {
+        // 生闷气时：道歉 / 夸她 / 说喜欢她 → 就被哄回来了
+        if (heard === 'userSorry' || heard === 'userPraise' || heard === 'userAffection') { clearAwayTimers(); say('coax', { force: true }); later(() => comeBack(true), 1600) }
+      } else if (heard) {
+        setTimeout(() => say(heard, { minGapMs: 3000 }), reactionDelay())
+      } else if (Math.random() < 0.7) {
+        setTimeout(() => say('userSend', { minGapMs: 4000 }), reactionDelay())
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userInput, ready, hidden])
@@ -3400,7 +3500,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     const now = Date.now()
     wake(false)
     lastActivityRef.current = now
-    if (phase === 'thinking' || phase === 'waiting' || phase === 'tool' || phase === 'review') glow(null)
+    if (phase === 'thinking' || phase === 'waiting' || phase === 'tool' || phase === 'review') { glow(null); stopActivity() }
     if (phase !== 'idle' && (prev === 'idle' || prev === 'done' || prev === 'failed')) {
       turnStartRef.current = now
       saidLongThinkRef.current = false
@@ -3413,13 +3513,17 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
       if (tool && tool !== lastToolRef.current) {
         lastToolRef.current = tool
         toolCountRef.current++
-        if (toolCountRef.current === 8 || toolCountRef.current === 20) say('toolMany', { minGapMs: 8000 })
+        // 只有真的在问你（ask_user_question 等）时才说「你来决定」
+        if (isAskTool(tool)) say('needYou', { force: true })
+        else if (toolCountRef.current === 8 || toolCountRef.current === 20) say('toolMany', { minGapMs: 8000 })
         else if (Math.random() < 0.65) say(toolTrigger(tool), { minGapMs: 12000 })
       }
-    } else if (phase === 'review' || phase === 'waiting') {
-      if (phase === 'review') say('waiting', { force: true })
+    } else if (phase === 'review') {
+      // review = 模型在写回复正文，不是在等你；偶尔嘀咕一句「组织语言」
+      if (prev !== 'review' && Math.random() < 0.4) say('writing', { minGapMs: 45000 })
     } else if (phase === 'done' && prev !== 'done') {
       glow('happy', 12000)
+      lastDoneAtRef.current = now
       lastToolRef.current = null
       failStreakRef.current = 0
       const dur = turnStartRef.current ? now - turnStartRef.current : 0
@@ -3456,12 +3560,50 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, hidden])
 
+  // 调试钩子（控制台 / 截图脚本用）：window.__maidDebug.act('stroll') / .pat(30) / .flee() / .spin(3) / .squeeze()
+  useEffect(() => {
+    const w = window as any
+    const key = isPiP ? '__maidDebugPip' : '__maidDebug'
+    w[key] = {
+      say: (t: Trigger, vars?: Record<string, string | number>) => say(t, { force: true, vars }),
+      act: (id: string) => { const a = ACTIVITIES.find(x => x.id === id); if (a) startActivity(a) },
+      pat: (n = 1, where: 'head' | 'body' = 'head') => { for (let i = 0; i < n; i++) touchPet(where) },
+      flee: () => runAway(),
+      comeBack: () => comeBack(true),
+      spin: (n = 1) => { for (let i = 0; i < n; i++) setTimeout(() => onWheelSprite({ deltaY: 100 } as unknown as React.WheelEvent), i * 900) },
+      squeeze: (ms = 1200) => { squeezeStart(0, 0); setTimeout(() => squeezeEnd(true), ms) },
+      state: () => ({ away: awayRef.current, patience: Math.round(patienceRef.current.value), activity: activityRef.current?.id ?? null, dozing: dozingRef.current, phase: prevPhaseRef.current }),
+    }
+    return () => { delete w[key] }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 整点报时：页面可见、她没睡没跑、也不在忙的时候，一半概率报个时
+  const lastChimeRef = useRef(-1)
+  useEffect(() => {
+    if (!ready || hidden || isPiP) return
+    const t = setInterval(() => {
+      const d = new Date()
+      if (d.getMinutes() !== 0 || lastChimeRef.current === d.getHours()) return
+      lastChimeRef.current = d.getHours()
+      if (document.hidden || dozingRef.current || awayRef.current !== 'none') return
+      if (prevPhaseRef.current !== 'idle' && prevPhaseRef.current !== 'done') return
+      if (Math.random() < 0.5) say('hourChime', { minGapMs: 30000, vars: { h: d.getHours() } })
+    }, 20000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, hidden, isPiP])
+
   // 打招呼 + 闲着时偶尔嘀咕（饭点/深夜有专门台词）；离开页面回来会说「欢迎回来」
   useEffect(() => {
     if (!ready || hidden || isPiP) return
     if (!greetedRef.current) {
       greetedRef.current = true
-      setTimeout(() => say(greetTrigger(), { force: true }), 1800)
+      const g = greetFor(memRef.current)
+      const hol = holidayFor()
+      memRef.current = checkIn(memRef.current)
+      saveMemory(memRef.current)
+      setTimeout(() => say(g, { force: true, vars: hol ? { d: hol } : undefined }), 1800)
     }
     let awayAt = 0
     const onVis = (): void => {
@@ -3471,10 +3613,17 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     document.addEventListener('visibilitychange', onVis)
     const t = setInterval(() => {
       if (document.hidden) return
+      memRef.current = checkIn(memRef.current)
+      saveMemory(memRef.current)
+      if (awayRef.current !== 'none') return
       const idleFor = Date.now() - Math.max(lastActivityRef.current, lastSpeakRef.current)
       if (prevPhaseRef.current !== 'idle' && prevPhaseRef.current !== 'done') return
       if (dozingRef.current) { if (Math.random() < 0.3) say('doze', { minGapMs: 150000 }); return }
-      if (idleFor > 2 * 60000 && Math.random() < 0.55) say(timeTrigger() || 'idle', { minGapMs: 90000 })
+      if (idleFor > 50000 && !activityRef.current && Math.random() < 0.4) { startActivity(pickActivity(recentActsRef.current)); return }
+      if (idleFor > 2 * 60000 && Math.random() < 0.55) {
+        const afterWork = Date.now() - lastDoneAtRef.current < 10 * 60000 && Math.random() < 0.5
+        say(timeTrigger() || (afterWork ? 'idleAfterWork' : 'idle'), { minGapMs: 90000 })
+      }
     }, 45000)
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3508,7 +3657,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
   useEffect(() => {
     if (!ready || hidden || isPiP) return
     const t = setInterval(() => {
-      if (document.hidden || dozingRef.current) return
+      if (document.hidden || dozingRef.current || awayRef.current !== 'none' || activityRef.current) return
       const p = prevPhaseRef.current
       if (p !== 'idle' && p !== 'done') return
       const quiet = Date.now() - Math.max(lastActivityRef.current, lastSpeakRef.current)
@@ -3563,7 +3712,14 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
 
   const onClickSprite = async (e?: React.MouseEvent): Promise<void> => {
     if (!isPiP && drag.wasDrag()) return
+    if (awayRef.current !== 'none') return
+    if (suppressClickRef.current) return   // 刚才是长按捏她，松手不算摸头
     setPressed(false)
+    let where: 'head' | 'body' = 'head'
+    if (e && e.currentTarget) {
+      const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      if (r.height > 0 && e.clientY && (e.clientY - r.top) / r.height > 0.6) where = 'body'
+    }
     if (e && e.currentTarget) {
       const box = (e.currentTarget as HTMLElement).getBoundingClientRect()
       const host = (e.currentTarget as HTMLElement).parentElement?.getBoundingClientRect() || box
@@ -3576,7 +3732,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     setPatPopKey(k => k + 1)
     setPatCount(c => c + 1)
     playPress()
-    if (!wake(true)) showNextQuote()
+    if (!wake(true)) touchPet(where)
     try { await fetch('/api/maid/pat', { method: 'POST', body: '' }) } catch { /* ignore */ }
   }
 
@@ -3654,7 +3810,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
   if (!isPiP && hidden) return null
 
   // 提问标题
-  const promptTitle = userInput ? userInput.trim() : '就绪待命中'
+  const promptTitle = userInput ? userInput.trim() : '没有进行中的任务'
 
   // 计算当前选中的 Agent 视图数据
   const currentAgent = agents.find(a => a.id === selectedAgentId) || {
@@ -3697,7 +3853,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
   } else if (currentDisplayPhase === 'failed') {
     finalStatusText = '执行遇到了问题'
   } else {
-    finalStatusText = currentDisplayLine || '待命中 · 随时向我提问'
+    finalStatusText = (!currentDisplayLine || currentDisplayLine === '就绪') ? '有活儿随时叫我～' : currentDisplayLine
   }
 
   useLayoutEffect(() => {
@@ -3736,11 +3892,30 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
             h('span', { className: 'dsh-aether-step-tag' }, '用户'),
             h('span', { className: 'dsh-aether-step-text', title: userInput }, userInput)
           ) : null,
-          h('div', { className: 'dsh-aether-step-item dsh-aether-step-item--running' },
-            h('span', { className: 'dsh-aether-step-icon' }, h(IconLoading)),
-            h('span', { className: 'dsh-aether-step-tag' }, '状态'),
-            h('span', { className: 'dsh-aether-step-text' }, currentDisplayPhase === 'thinking' ? '正在深层思考…' : '等待模型响应指令…')
-          )
+          (currentDisplayPhase === 'idle' || currentDisplayPhase === 'done' || currentDisplayPhase === 'failed')
+            ? h('div', { className: `dsh-aether-empty dsh-aether-empty--${currentDisplayPhase}` },
+                h('div', { className: 'dsh-aether-empty__icon' },
+                  currentDisplayPhase === 'done' ? h(IconDone, { size: 16, color: '#22a06b' })
+                    : currentDisplayPhase === 'failed' ? h(IconFailed, { size: 16, color: '#e0524f' })
+                    : h(IconTarget, { size: 16, color: '#8a93ab' })),
+                h('div', { className: 'dsh-aether-empty__title' },
+                  currentDisplayPhase === 'done' ? '上一轮已经做完啦'
+                    : currentDisplayPhase === 'failed' ? '上一轮出了点问题'
+                    : '手头空着呢～'),
+                h('div', { className: 'dsh-aether-empty__sub' },
+                  currentDisplayPhase === 'done' ? '有新的活儿随时叫我，我在旁边待命～'
+                    : currentDisplayPhase === 'failed' ? '可以换个说法再发一次，我再试试。'
+                    : '在下面输入指令，我马上开工！')
+              )
+            : h('div', { className: 'dsh-aether-step-item dsh-aether-step-item--running' },
+                h('span', { className: 'dsh-aether-step-icon' }, h(IconLoading)),
+                h('span', { className: 'dsh-aether-step-tag' }, '状态'),
+                h('span', { className: 'dsh-aether-step-text' },
+                  currentDisplayPhase === 'thinking' ? '正在深层思考…'
+                    : currentDisplayPhase === 'tool' ? '正在调用工具…'
+                    : currentDisplayPhase === 'review' ? '正在复查结果…'
+                    : '等待模型响应…')
+              )
         )
       }
 
@@ -3783,8 +3958,8 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
             h('div', { className: 'dsh-aether-step-right' },
               durationStr ? h('span', { className: 'dsh-aether-step-duration' }, durationStr) : null,
               step.status === 'running' ? h('span', { style: { display: 'flex', alignItems: 'center' } }, h(IconLoading)) :
-              step.status === 'failed' ? h('span', { style: { display: 'flex', alignItems: 'center' } }, h(IconFailed, { size: 12, color: '#f87171' })) :
-              step.status === 'done' ? h('span', { style: { display: 'flex', alignItems: 'center' } }, h(IconDone, { size: 12, color: '#4ade80' })) : null
+              step.status === 'failed' ? h('span', { style: { display: 'flex', alignItems: 'center' } }, h(IconFailed, { size: 12, color: '#e0524f' })) :
+              step.status === 'done' ? h('span', { style: { display: 'flex', alignItems: 'center' } }, h(IconDone, { size: 12, color: '#22a06b' })) : null
             )
           )
         }),
@@ -3795,11 +3970,11 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
             className: 'dsh-aether-step-item dsh-aether-step-item--queued',
             title: `排队等待执行: ${q.content}`
           },
-            h('span', { className: 'dsh-aether-step-icon' }, h(IconHourglass, { size: 12, color: '#fb923c' })),
-            h('span', { className: 'dsh-aether-step-tag', style: { color: '#fb923c', background: 'rgba(251, 146, 60, 0.15)' } }, '排队中'),
-            h('span', { className: 'dsh-aether-step-text', style: { color: '#fdba74' } }, q.content),
+            h('span', { className: 'dsh-aether-step-icon' }, h(IconHourglass, { size: 12, color: '#ec7c2a' })),
+            h('span', { className: 'dsh-aether-step-tag', style: { color: '#ec7c2a', background: 'rgba(236, 124, 42, 0.14)' } }, '排队中'),
+            h('span', { className: 'dsh-aether-step-text', style: { color: '#a8531a' } }, q.content),
             h('div', { className: 'dsh-aether-step-right' },
-              h('span', { className: 'dsh-spin', style: { display: 'flex', alignItems: 'center' } }, h(IconLoading, { size: 10, color: '#fb923c' }))
+              h('span', { className: 'dsh-spin', style: { display: 'flex', alignItems: 'center' } }, h(IconLoading, { size: 10, color: '#ec7c2a' }))
             )
           )
         )
@@ -3825,11 +4000,11 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
         h('div', { className: 'dsh-aether-stat-grid-row' },
           h('span', { className: 'dsh-aether-stat-pill dsh-aether-stat-pill--scope' }, '本轮'),
           h('div', { className: 'dsh-aether-stat-pill dsh-aether-stat-pill--hit', title: `本轮前缀缓存命中率: ${m.turnCacheHitPercent}` },
-            h(IconCache, { size: 11, color: '#34d399' }),
+            h(IconCache, { size: 11, color: '#22a06b' }),
             m.turnCacheHitPercent
           ),
           h('div', { className: 'dsh-aether-stat-pill', title: `本轮已执行: ${m.turnSteps || 0} 步` },
-            h(IconActivity, { size: 10, color: '#60a5fa' }),
+            h(IconActivity, { size: 10, color: '#1f7ae0' }),
             `${m.turnSteps || 0}步`
           ),
           h('div', { className: 'dsh-aether-stat-pill dsh-aether-stat-pill--tokens', title: `本轮计费输入: ${turnInFmt} · 输出: ${turnOutFmt}` },
@@ -3840,11 +4015,11 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
         h('div', { className: 'dsh-aether-stat-grid-row' },
           h('span', { className: 'dsh-aether-stat-pill dsh-aether-stat-pill--scope' }, '全局'),
           h('div', { className: 'dsh-aether-stat-pill dsh-aether-stat-pill--hit', title: `全会话累计缓存命中率: ${m.sessionCacheHitPercent}` },
-            h(IconCache, { size: 11, color: '#34d399' }),
+            h(IconCache, { size: 11, color: '#22a06b' }),
             m.sessionCacheHitPercent
           ),
           h('div', { className: 'dsh-aether-stat-pill', title: `会话全局统计: ${m.turns} 轮 · ${m.steps} 步` },
-            h(IconActivity, { size: 10, color: '#60a5fa' }),
+            h(IconActivity, { size: 10, color: '#1f7ae0' }),
             `${m.turns}轮·${m.steps}步`
           ),
           h('div', { className: 'dsh-aether-stat-pill dsh-aether-stat-pill--tokens', title: `全局累计输入: ${sessInFmt} · 输出: ${sessOutFmt}` },
@@ -3875,11 +4050,11 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
           const isFailed = s.status === 'failed' || s.phase === 'failed'
           const isDone = s.status === 'done' || s.phase === 'done'
 
-          let dotColor = '#94a3b8'
+          let dotColor = '#8a93ab'
           let statusText = '就绪'
-          if (isRunning) { dotColor = '#fbbf24'; statusText = '运行中' }
-          else if (isFailed) { dotColor = '#f87171'; statusText = '异常' }
-          else if (isDone) { dotColor = '#4ade80'; statusText = '已完成' }
+          if (isRunning) { dotColor = '#d98b0c'; statusText = '运行中' }
+          else if (isFailed) { dotColor = '#e0524f'; statusText = '异常' }
+          else if (isDone) { dotColor = '#22a06b'; statusText = '已完成' }
 
           const sessionTitle = s.title && s.title !== '新会话' ? s.title : (s.userInput || `会话 #${idx + 1}`)
 
@@ -3907,14 +4082,14 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
                 )
               ),
               h('div', { className: 'dsh-aether-popover-title' }, sessionTitle),
-              s.userInput && s.userInput !== sessionTitle ? h('div', { style: { fontSize: '9.5px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, `最新: ${s.userInput}`) : null,
-              s.queuedMessages && s.queuedMessages.length > 0 ? h('div', { style: { fontSize: '9px', color: '#fb923c', display: 'flex', alignItems: 'center', gap: '3px', marginTop: '1px' } },
-                h(IconHourglass, { size: 9, color: '#fb923c' }),
+              s.userInput && s.userInput !== sessionTitle ? h('div', { style: { fontSize: '9.5px', color: '#8a93ab', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, `最新: ${s.userInput}`) : null,
+              s.queuedMessages && s.queuedMessages.length > 0 ? h('div', { style: { fontSize: '9px', color: '#ec7c2a', display: 'flex', alignItems: 'center', gap: '3px', marginTop: '1px' } },
+                h(IconHourglass, { size: 9, color: '#ec7c2a' }),
                 `${s.queuedMessages.length} 条排队中: ${s.queuedMessages[0].content.slice(0, 16)}...`
               ) : null,
               h('div', { className: 'dsh-aether-popover-footer' },
                 h('span', null, `${s.stepsCount || (s.steps ? s.steps.length : 0)} 个步骤`),
-                isActive ? h('span', { style: { color: '#38bdf8', fontWeight: 600 } }, '● 活跃') : null
+                isActive ? h('span', { style: { color: '#1f7ae0', fontWeight: 600 } }, '● 活跃') : null
               )
             )
           )
@@ -4033,12 +4208,12 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
         h('div', { className: 'dsh-aether-footer-left' },
           // 模型名
           h('span', { className: 'dsh-aether-mini-pill dsh-aether-mini-pill--model', title: `当前模型: ${metaModel.modelName}` },
-            h(IconModelChip, { size: 11, color: '#38bdf8' }),
+            h(IconModelChip, { size: 11, color: '#1f7ae0' }),
             metaModel.modelName
           ),
           // Reasoning Effort
           h('span', { className: 'dsh-aether-mini-pill dsh-aether-mini-pill--effort', title: `推理思维链档位: ${metaModel.effort}` },
-            h(IconBrain, { size: 11, color: '#c084fc' }),
+            h(IconBrain, { size: 11, color: '#7c5ce6' }),
             metaModel.effort
           ),
           // 上下文统计 & Hover / Click Popover (对齐官方设计，支持触屏点击展开)
@@ -4049,29 +4224,30 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
               setShowCtxPopover(v => !v)
             },
           },
-            h(IconContext, { size: 11, color: '#4ade80' }),
-            `已用 ${ctx.usedPercent} (${usedFmt}/${limitFmt})`,
+            h(IconContext, { size: 11, color: '#22a06b' }),
+            `已用 ${ctx.usedPercent}`,
+            h('span', { className: 'dsh-aether-mini-pill__detail' }, ` (${usedFmt}/${limitFmt})`),
             h('div', { className: 'dsh-aether-context-popover' },
               h('div', { className: 'dsh-aether-ctx-header' },
                 h('span', null, `上下文已用 ${ctx.usedPercent}`),
-                h('span', { style: { color: '#94a3b8', fontFamily: 'ui-monospace, monospace' } }, `~${usedFmt} / ${limitFmt}`)
+                h('span', { style: { color: '#8a93ab', fontFamily: 'ui-monospace, monospace' } }, `~${usedFmt} / ${limitFmt}`)
               ),
               h('div', { className: 'dsh-aether-ctx-bar-track' },
-                h('div', { className: 'dsh-aether-ctx-bar-seg', style: { width: `${sysPct}%`, background: '#cbd5e1' } }),
-                h('div', { className: 'dsh-aether-ctx-bar-seg', style: { width: `${toolsPct}%`, background: '#a855f7' } }),
-                h('div', { className: 'dsh-aether-ctx-bar-seg', style: { width: `${msgPct}%`, background: '#38bdf8' } })
+                h('div', { className: 'dsh-aether-ctx-bar-seg', style: { width: `${sysPct}%`, background: '#b3bccf' } }),
+                h('div', { className: 'dsh-aether-ctx-bar-seg', style: { width: `${toolsPct}%`, background: '#7c5ce6' } }),
+                h('div', { className: 'dsh-aether-ctx-bar-seg', style: { width: `${msgPct}%`, background: '#1f7ae0' } })
               ),
               h('div', { className: 'dsh-aether-ctx-breakdown' },
                 h('div', { className: 'dsh-aether-ctx-row' },
-                  h('span', null, h('span', { className: 'dsh-aether-ctx-dot', style: { background: '#cbd5e1' } }), '系统提示词'),
+                  h('span', null, h('span', { className: 'dsh-aether-ctx-dot', style: { background: '#b3bccf' } }), '系统提示词'),
                   h('span', { style: { fontFamily: 'ui-monospace, monospace' } }, `~${sysFmt}`)
                 ),
                 h('div', { className: 'dsh-aether-ctx-row' },
-                  h('span', null, h('span', { className: 'dsh-aether-ctx-dot', style: { background: '#a855f7' } }), '工具'),
+                  h('span', null, h('span', { className: 'dsh-aether-ctx-dot', style: { background: '#7c5ce6' } }), '工具'),
                   h('span', { style: { fontFamily: 'ui-monospace, monospace' } }, `~${toolsFmt}`)
                 ),
                 h('div', { className: 'dsh-aether-ctx-row' },
-                  h('span', null, h('span', { className: 'dsh-aether-ctx-dot', style: { background: '#38bdf8' } }), '对话消息'),
+                  h('span', null, h('span', { className: 'dsh-aether-ctx-dot', style: { background: '#1f7ae0' } }), '对话消息'),
                   h('span', { style: { fontFamily: 'ui-monospace, monospace' } }, `~${msgFmt}`)
                 )
               )
@@ -4080,7 +4256,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
         ),
         h('div', { className: 'dsh-aether-footer-right' },
           h('span', { className: 'dsh-aether-mini-pill dsh-aether-mini-pill--speed', title: `生成速率: ${speedToks} · 首字延迟: ${ttftStr}` },
-            h(IconLightning, { size: 10, color: '#fbbf24' }),
+            h(IconLightning, { size: 10, color: '#d98b0c' }),
             `${speedToks} · 首字 ${ttftStr}`
           )
         )
@@ -4107,10 +4283,10 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
           const isFailed = s.status === 'failed' || s.phase === 'failed'
           const isDone = s.status === 'done' || s.phase === 'done'
 
-          let dotColor = '#94a3b8'
-          if (isRunning) dotColor = '#fbbf24'
-          else if (isFailed) dotColor = '#f87171'
-          else if (isDone) dotColor = '#4ade80'
+          let dotColor = '#8a93ab'
+          if (isRunning) dotColor = '#d98b0c'
+          else if (isFailed) dotColor = '#e0524f'
+          else if (isDone) dotColor = '#22a06b'
 
           const sessionTitle = s.title && s.title !== '新会话' ? s.title : (s.userInput || `会话 #${idx + 1}`)
 
@@ -4148,7 +4324,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
         key: 'maid-push-modal-backdrop',
         style: {
           position: 'fixed', left: 0, top: 0, right: 0, bottom: 0,
-          background: 'rgba(0, 0, 0, 0.78)', backdropFilter: 'blur(8px)',
+          background: 'rgba(38, 50, 79, 0.45)', backdropFilter: 'blur(8px)',
           zIndex: 2147483647, display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: '16px', boxSizing: 'border-box',
           pointerEvents: 'auto',
@@ -4160,8 +4336,8 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
         h('div', {
           style: {
             background: '#0f172a',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            borderRadius: '16px',
+            border: '2px solid #26324f',
+            borderRadius: '18px',
             maxWidth: '820px',
             width: '100%',
             maxHeight: '90vh',
@@ -4188,29 +4364,32 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
 
     // ───── 当前表情 ─────
     const speakingNow = speechVisible && !speechFading && !!currentQuote.text
-    const moodFace: Face | undefined = !speakingNow ? undefined
-      : /哈欠|揉眼|眼皮/.test(currentQuote.text) ? 'sleepy'
-      : currentQuote.kind === 'think' ? 'think' : MOOD_FACE[currentQuote.mood]
+    const moodFace: Face | undefined = !speakingNow ? undefined : faceOfLine(currentQuote)
     const phaseFace: Face = dozing ? 'sleepy'
       : (phase === 'thinking' || phase === 'waiting') ? 'think'
       : (phase === 'tool' || phase === 'review') ? 'focus' : 'neutral'
-    const eventFace = reactFace ?? moodFace ?? glowFace
+    const actFace: Face | undefined = activity?.face
+    const eventFace = reactFace ?? moodFace ?? glowFace ?? actFace
     const baseFace: Face = eventFace ?? phaseFace
-    const shownFace: Face = blinking && BLINKABLE.has(baseFace) ? 'blink' : baseFace
-    const manpu: Manpu | null = dozing && !reactFace ? 'zzz' : (eventFace ? (FACE_MANPU[eventFace] ?? null) : null)
     const talking = speakingNow && typed < plainLength(currentQuote.text)
+    // 嘴型：平常脸说话时一张一合（内心戏/小声嘀咕不动嘴）
+    const mouthFace = lipSync(baseFace, talking && (currentQuote.kind === 'say' || currentQuote.kind === 'shout'), typed)
+    const shownFace: Face = blinking && BLINKABLE.has(mouthFace) ? 'blink' : mouthFace
+    const manpu: Manpu | null = away !== 'none' ? null
+      : dozing && !reactFace ? 'zzz'
+      : eventFace ? ((!reactFace && !moodFace && !glowFace && activity?.manpu) || (FACE_MANPU[eventFace] ?? null)) : null
+    const actClass = away === 'fleeing' ? ` wg-act--flee-${awayDirRef.current}`
+      : away === 'away' ? ' wg-act--gone'
+      : away === 'returning' ? ` wg-act--return-${awayDirRef.current}`
+      : spinClass ? ` ${spinClass}`
+      : squeezing ? ' wg-act--squeeze'
+      : reactFace === 'angry' ? ' wg-act--angry'
+      : reactFace === 'dizzy' ? ' wg-act--dizzy'
+      : activity ? ` wg-act--${activity.id === 'snack' ? 'snack' : activity.id}` : ''
     const renderManpu = () => {
       if (!manpu) return null
-      const P = (d: string, cls: string, k: string) => h('path', { key: k, d, className: cls })
-      const body = manpu === 'think' ? [h('text', { key: 'q', x: 5, y: 21, className: 'q' }, '?'), h('circle', { key: 'd', cx: 21, cy: 21, r: 2 })]
-        : manpu === 'zzz' ? [h('text', { key: 'a', x: 1, y: 24, className: 'z z1' }, 'z'), h('text', { key: 'b', x: 9, y: 15, className: 'z z2' }, 'z'), h('text', { key: 'c', x: 16, y: 8, className: 'z z3' }, 'Z')]
-        : manpu === 'sweat' ? [P('M13 3 C 9 10, 6 13, 6 17 a 7 7 0 0 0 14 0 C 20 13, 17 10, 13 3 Z', 'drop', 'a'), P('M10 16 q 0 3 3 4', 'shine', 'b')]
-        : manpu === 'bang' ? [P('M5 5 L8.5 15', 'line', 'a'), P('M13 2 L13 14', 'line', 'b'), P('M21 5 L17.5 15', 'line', 'c')]
-        : manpu === 'vein' ? [P('M4 10 Q 10 10 10 4 M16 4 Q 16 10 22 10 M22 16 Q 16 16 16 22 M10 22 Q 10 16 4 16', 'vein', 'a')]
-        : manpu === 'sparkle' ? [P('M8 2 L9.6 7.4 L15 9 L9.6 10.6 L8 16 L6.4 10.6 L1 9 L6.4 7.4 Z', 'spark', 'a'), P('M19 12 L20 15 L23 16 L20 17 L19 20 L18 17 L15 16 L18 15 Z', 'spark s2', 'b')]
-        : [P('M13 22 C 4 15, 3 10, 6 7 C 9 4, 12 6, 13 8 C 14 6, 17 4, 20 7 C 23 10, 22 15, 13 22 Z', 'heart', 'a')]
       return h('div', { key: 'manpu-' + manpu + '-' + quoteKey, className: `dsh-manpu dsh-manpu--${manpu}`, 'aria-hidden': true },
-        h('svg', { viewBox: '0 0 26 26' }, ...body))
+        h('svg', { viewBox: '0 0 26 26', dangerouslySetInnerHTML: { __html: manpuMarkup(manpu) } }))
     }
 
     // 渲染二次元漫画经典表情包对话气泡 (Speech Bubble - 100% 纯 SVG，禁止 Emoji)
@@ -4226,10 +4405,19 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
                 : h('path', { d: 'M12 2.5l2.6 6.3 6.8.5-5.2 4.4 1.6 6.6L12 16.8l-5.8 3.5 1.6-6.6-5.2-4.4 6.8-.5z', fill: it.color, stroke: '#fff', strokeWidth: 1.5 })))
       )) : null
 
-    const renderSpeechBubble = (inPiP: boolean) => {
+    const renderSpeechBubble = (inPiP: boolean, atPeek = false) => {
       if (!speechVisible || !currentQuote.text) return null
+      // 她躲到屏幕边上时，台词不留在原地：跟着她画到探头的位置旁边
+      if (!inPiP && !atPeek && away === 'away') return null
       const isDockLeft = typeof window !== 'undefined' && pos.right > (window.innerWidth / 2)
-      const dockClass = inPiP ? 'dsh-say--pip' : (isDockLeft ? 'dsh-say--dock-left' : 'dsh-say--dock-right')
+      const peekSide = awayDirRef.current
+      const dockClass = inPiP ? 'dsh-say--pip'
+        : atPeek ? (peekSide === 'right' ? 'dsh-say--dock-right dsh-say--peek' : 'dsh-say--dock-left dsh-say--peek')
+        : (isDockLeft ? 'dsh-say--dock-left' : 'dsh-say--dock-right')
+      const peekStyle: React.CSSProperties | undefined = atPeek ? {
+        position: 'fixed', bottom: (pos.bottom + 70 + 84) + 'px', zIndex: 2147483001,
+        ...(peekSide === 'right' ? { right: '104px', left: 'auto' } : { left: '104px', right: 'auto' }),
+      } : undefined
       const k = currentQuote.kind
       let left = typed
       const parts: React.ReactNode[] = []
@@ -4247,6 +4435,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
         key: 'speech-' + quoteKey,
         className: `dsh-say dsh-say--${k} ${dockClass}${speechFading ? ' dsh-say--out' : ''}`,
         'data-mood': currentQuote.mood,
+        style: peekStyle,
         onClick: (e: React.MouseEvent) => { e.stopPropagation(); if (typed < plainLength(currentQuote.text)) { if (typeTimerRef.current) clearTimeout(typeTimerRef.current); typeTimerRef.current = null; setTyped(plainLength(currentQuote.text)); scheduleHide(currentQuote) } else hideQuote() },
         onMouseEnter: () => { hoverRef.current = true },
         onMouseLeave: () => { hoverRef.current = false },
@@ -4363,47 +4552,54 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     if (isPiP) {
       const cardClass = `dsh-aether-card dsh-mode-${layoutMode}`
       const isLargeMode = layoutMode === 'wide-large'
+      const isTallMode = layoutMode === 'tall'
 
-      return h(React.Fragment, null,
-        h('div', { className: cardClass, ref: cardRef, 'data-phase': currentDisplayPhase },
-          // 1. 全局最左侧：会话导航栏 (无论宽屏、窄屏、竖屏模式均常驻可用)
-        renderSessionRail(),
-
-        // 2. 角色立绘展台 (Podium)
-        h('div', {
-          className: 'dsh-aether-podium',
-          onClick: (e: React.MouseEvent) => { void onClickSprite(e) },
-          onPointerDown: () => setPressed(true),
-          onPointerUp: () => setPressed(false),
-          onPointerLeave: () => setPressed(false),
-          onContextMenu,
-        },
-          h('div', { className: 'dsh-aether-avatar-wrapper' },
-            h('div', {
-              className: 'dsh-aether-aura',
-              style: { background: meta.aura }
-            }),
-            patPopKey > 0 ? h('div', {
-              className: 'dsh-maid-pat-pop',
-              key: 'pip-pop-' + patPopKey,
-              style: { display: 'flex', alignItems: 'center', gap: '3px' }
-            }, h(IconHeart, { size: 13 }), '+1') : null,
-            patCount > 0 ? h('div', {
-              className: 'dsh-maid-pat-badge',
-              style: { top: '0', right: '0', display: 'flex', alignItems: 'center', gap: '3px' }
-            }, h(IconHeart, { size: 10 }), String(patCount)) : null,
+      // 角色立绘展台 (Podium)：宽屏时独占中列；竖屏时收进右列顶部的小舞台
+      const podiumNode = h('div', {
+        key: 'podium',
+        className: 'dsh-aether-podium',
+        onClick: (e: React.MouseEvent) => { void onClickSprite(e) },
+        onPointerDown: (e: React.PointerEvent) => { setPressed(true); if (e.button === 0) squeezeStart(e.clientX, e.clientY) },
+        onPointerMove: (e: React.PointerEvent) => squeezeMove(e.clientX, e.clientY),
+        onPointerUp: () => { setPressed(false); squeezeEnd(true) },
+        onPointerLeave: () => { setPressed(false); squeezeEnd(false) },
+        onPointerCancel: () => { setPressed(false); squeezeEnd(false) },
+        onWheel: onWheelSprite,
+        onContextMenu,
+      },
+        h('div', { className: 'dsh-aether-avatar-wrapper' },
+          h('div', {
+            className: 'dsh-aether-aura',
+            style: { background: meta.aura }
+          }),
+          patPopKey > 0 ? h('div', {
+            className: 'dsh-maid-pat-pop',
+            key: 'pip-pop-' + patPopKey,
+            style: { display: 'flex', alignItems: 'center', gap: '3px' }
+          }, h(IconHeart, { size: 13 }), '+1') : null,
+          patCount > 0 ? h('div', { className: 'dsh-maid-pat-badge dsh-aether-pat-badge' }, h(IconHeart, { size: 10 }), String(patCount)) : null,
+          h('div', { className: 'wg-act dsh-aether-act' + (away !== 'none' ? '' : actClass), key: 'pip-act' },
             h('img', {
               key: 'pip-sprite-' + bumpKey,
               className: `dsh-aether-sprite${bumpKey > 0 ? ' dsh-aether-sprite--bump' : ''}${pressed ? ' dsh-maid-sprite--pressed' : ''}`,
               src: FACES[shownFace],
               alt: 'maid pet',
               draggable: false,
-            }),
-            renderFx(),
-            renderSpeechBubble(true)
+            })
           ),
-          isLargeMode ? renderTelemetry() : null
+          renderFx(),
+          renderSpeechBubble(true)
         ),
+        isLargeMode ? renderTelemetry() : null
+      )
+
+      return h(React.Fragment, null,
+        h('div', { className: cardClass, ref: cardRef, 'data-phase': currentDisplayPhase },
+          // 1. 全局最左侧：会话导航栏 (无论宽屏、窄屏、竖屏模式均常驻可用)
+        renderSessionRail(),
+
+        // 2. 宽屏：角色立绘展台占据中列
+        isTallMode ? null : podiumNode,
 
         // 3. 右列完整主交互控制台 (自上而下拥有充足宽度与高度)
         h('div', { className: 'dsh-aether-main-col' },
@@ -4431,6 +4627,9 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
               }, h(IconRestore))
             )
           ),
+
+          // 竖屏：立绘小舞台放在顶栏下方，不再消失
+          isTallMode ? podiumNode : null,
 
           // 2. 中部：本轮多步执行时间轴 (完整长命令 + 专属语义图标 + 耗时 + 失败红叉)
           renderTimeline(),
@@ -4485,7 +4684,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     const bubbleClass = `dsh-maid-bubble${isDockLeft ? ' dsh-maid-bubble--dock-left' : ''}${speaking ? ' dsh-maid-bubble--eclipsed' : ''}`
 
     return h(React.Fragment, null,
-      h('div', { className: 'dsh-maid-widget', ref: widgetRef, style: widgetStyle, 'data-phase': phase },
+      h('div', { className: `dsh-maid-widget${away !== 'none' ? ' wg-away' : ''}`, ref: widgetRef, style: widgetStyle, 'data-phase': phase },
         h('div', {
           className: bubbleClass,
           key: 'bubble',
@@ -4493,7 +4692,10 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
           title: isMobile ? '点击展开移动端控制台' : '点击展开控制台',
         },
           h('div', { className: 'dsh-maid-bubble__title-row' },
-            h(IconTarget, { size: 13 }),
+            h('span', { className: `dsh-maid-bubble__pill dsh-maid-bubble__pill--${phase}`, key: 'pill' },
+              h('span', { className: 'dsh-maid-bubble__dot' }),
+              (PHASE_DICT[phase] || PHASE_DICT.idle).text
+            ),
             h('span', { className: 'dsh-maid-bubble__title-text', title: promptTitle }, promptTitle)
           ),
           h('div', {
@@ -4548,7 +4750,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
             style: { background: meta.aura },
           }) : null,
           patCount > 0 ? h('div', {
-            className: 'dsh-maid-pat-badge',
+            className: 'dsh-maid-pat-badge wg-hide-when-away',
             key: 'badge-' + patCount,
             style: { display: 'flex', alignItems: 'center', gap: '3px' }
           }, h(IconHeart, { size: 10 }), String(patCount)) : null,
@@ -4557,6 +4759,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
             key: 'pop-' + patPopKey,
             style: { display: 'flex', alignItems: 'center', gap: '3px' }
           }, h(IconHeart, { size: 12 }), '+1') : null,
+          h('div', { className: 'wg-act' + actClass, key: 'act' },
           h('div', { className: `dsh-maid-look${dozing ? ' dsh-maid-look--dozing' : ''}`, ref: lookRef, key: 'look' },
           h('div', { className: `dsh-maid-talk${talking ? ' dsh-maid-talk--on' : ''}` },
           h('img', {
@@ -4565,19 +4768,31 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
             src: FACES[shownFace],
             alt: 'maid pet',
             draggable: false,
-            onPointerDown: (e: React.PointerEvent) => { setPressed(true); drag.onDown(e as any) },
-            onPointerUp: () => setPressed(false),
-            onPointerLeave: () => setPressed(false),
-            onPointerCancel: () => setPressed(false),
+            onPointerDown: (e: React.PointerEvent) => { setPressed(true); drag.onDown(e as any); if (e.button === 0) squeezeStart(e.clientX, e.clientY) },
+            onPointerMove: (e: React.PointerEvent) => squeezeMove(e.clientX, e.clientY),
+            onPointerUp: () => { setPressed(false); squeezeEnd(true) },
+            onPointerLeave: () => { setPressed(false); squeezeEnd(false) },
+            onPointerCancel: () => { setPressed(false); squeezeEnd(false) },
+            onWheel: onWheelSprite,
             onMouseEnter: () => { if (!wake(true) && Math.random() < 0.35) say('hover', { minGapMs: 45000 }) },
             onClick: (e: React.MouseEvent) => { void onClickSprite(e) },
             onContextMenu,
-          }))),
+          })))),
           renderManpu(),
           renderFx(),
           renderSpeechBubble(false)
         )
       ),
+      away === 'away' ? h('div', {
+        key: 'peek',
+        className: `wg-peek wg-peek--${awayDirRef.current}`,
+        style: { bottom: (pos.bottom + 70) + 'px' },
+        onClick: onPeekClick,
+        title: '她躲起来了……点一下哄哄她',
+      }, h('div', { className: 'wg-peek__in' },
+        h('img', { src: FACES.hmph, alt: '', draggable: false }),
+        h('span', { className: 'wg-peek__tag' }, '哼'))) : null,
+      away === 'away' ? renderSpeechBubble(false, true) : null,
       ...renderDrawer(),
       renderPushModal()
     )
@@ -4590,7 +4805,7 @@ function installStyles(ctx: any): void {
     const tag = document.createElement('style')
     tag.dataset.plugin = PLUGIN_ID
     tag.dataset.pluginCss = `${PLUGIN_ID}/maid.css`
-    tag.textContent = CSS + SPEECH_CSS
+    tag.textContent = CSS + SPEECH_CSS + PERSONA_CSS
     document.head.appendChild(tag)
     return () => {
       tag.remove()
