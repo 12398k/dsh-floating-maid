@@ -335,21 +335,71 @@ __maidDebug.state()         // 打印当前状态
 
 ---
 
-## 安装与构建
+## 安装
 
-### 作为 npm 包安装
+网页版插件（DSH 悬浮窗）与桌面版独立应用是**两套东西**，按需要选一个装。
+
+### 方式一：从 npm 安装（推荐）
 
 ```bash
 dsh plugin --profile web add whale-girl-pet
 ```
 
-`package.json` 声明了 `dsh.bundle.patch → ./cordis.patch.yml`，安装器会自动把插件写进 profile 的 cordis 加载树，无需手改 patch：
+`--profile` 换成你要装的 profile（`web` / `tui` / 自定义名），装完**重启 dsh** 或让 profile 热重载生效。
+
+`package.json` 声明了 `dsh.bundle.patch → ./cordis.patch.yml`，安装器会自动把插件写进该 profile 的 cordis 加载树，无需手改 patch：
 
 ```yaml
 - insert:
     - id: whale-girl-pet
       name: 'whale-girl-pet'
 ```
+
+卸载：
+
+```bash
+dsh plugin --profile web remove whale-girl-pet
+```
+
+查看已装插件：
+
+```bash
+dsh plugin --profile web list
+```
+
+### 方式二：从 GitHub 安装
+
+想用仓库里的最新代码（npm 版本可能落后），直接让 dsh 从 git 拉：
+
+```bash
+# 默认分支
+dsh plugin --profile web add github:12398k/dsh-floating-maid
+
+# 指定分支 / tag
+dsh plugin --profile web add github:12398k/dsh-floating-maid#main
+```
+
+也可以指向本地克隆的目录（插件包里已带编译好的 `lib/`，无需自行构建）：
+
+```bash
+git clone https://github.com/12398k/dsh-floating-maid.git
+dsh plugin --profile web add /path/to/dsh-floating-maid
+```
+
+> 走 GitHub 源安装时，`installBundle` 会先用 `git ls-remote` 检查仓库可达性（默认 5 秒超时）。国内网络若拉不动 GitHub，改用方式一或配好 Git 代理。
+
+### 方式三：桌面独立版（Windows，免安装）
+
+不依赖 DSH、不依赖浏览器、不联网的**独立桌宠**——透明无边框窗口 + 系统托盘，屏幕上只有角色和台词。
+
+到 [Releases](https://github.com/12398k/dsh-floating-maid/releases) 下载 `whale-girl-pet-win-x64.zip`，解压后双击 `鲸鱼娘桌宠.exe` 即可。详见 release 说明。
+
+### 装完之后
+
+1. 打开 DSH Web GUI（默认 `http://127.0.0.1:3080`），右下角会出现她。
+2. **浏览器缓存**：客户端 bundle 有缓存，装完/更新后强制刷新一次（`Ctrl+Shift+R`）。
+3. 想收手机推送，进「设置 → 离线推送 (Web Push)」按页面提示申请权限并订阅。
+4. 把她藏起来了？点右下角的「召唤 maid」按钮叫回来。
 
 ### 从源码构建
 

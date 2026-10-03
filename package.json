@@ -12,6 +12,14 @@
     "README.md"
   ],
   "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/12398k/dsh-floating-maid.git"
+  },
+  "homepage": "https://github.com/12398k/dsh-floating-maid#readme",
+  "bugs": {
+    "url": "https://github.com/12398k/dsh-floating-maid/issues"
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
