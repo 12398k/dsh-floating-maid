@@ -94,7 +94,7 @@ export class WebPushManager {
     notifyOnFailed: true,
     sound: true,
     proxyUrl: '',
-    subject: 'mailto:admin@nas.wucloud.indevs.in',
+    subject: 'mailto:admin@example.com',
     baseUrl: '',
   }
   private subscriptions: StoredSubscription[] = []
@@ -140,7 +140,7 @@ export class WebPushManager {
 
   private applyVapidDetails(): void {
     if (this.vapidKeys.publicKey && this.vapidKeys.privateKey && webpush) {
-      const subject = this.config.subject?.trim() || 'mailto:admin@nas.wucloud.indevs.in'
+      const subject = this.config.subject?.trim() || 'mailto:admin@example.com'
       webpush.setVapidDetails(
         subject,
         this.vapidKeys.publicKey,
