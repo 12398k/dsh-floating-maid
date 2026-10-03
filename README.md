@@ -355,38 +355,32 @@ dsh plugin --profile web add whale-girl-pet
       name: 'whale-girl-pet'
 ```
 
-卸载：
+卸载 / 查看：
 
 ```bash
 dsh plugin --profile web remove whale-girl-pet
-```
-
-查看已装插件：
-
-```bash
 dsh plugin --profile web list
 ```
 
-### 方式二：从 GitHub 安装
+### 方式二：从源码安装（本地构建）
 
-想用仓库里的最新代码（npm 版本可能落后），直接让 dsh 从 git 拉：
+仓库**只含源码，不含编译产物 `lib/`**（`lib/` 与 `node_modules/` 都在 `.gitignore` 里）。所以**不能**直接用 `dsh plugin add github:...`——那样装出来的包没有 `lib/index.js`，插件会加载失败。
 
-```bash
-# 默认分支
-dsh plugin --profile web add github:12398k/dsh-floating-maid
-
-# 指定分支 / tag
-dsh plugin --profile web add github:12398k/dsh-floating-maid#main
-```
-
-也可以指向本地克隆的目录（插件包里已带编译好的 `lib/`，无需自行构建）：
+正确做法是先克隆、构建，再以本地路径安装：
 
 ```bash
 git clone https://github.com/12398k/dsh-floating-maid.git
-dsh plugin --profile web add /path/to/dsh-floating-maid
+cd dsh-floating-maid
+
+bash scripts/build.sh        # 需要能访问到 DSH 安装目录，见下方「从源码构建」
+cd ..
+
+dsh plugin --profile web add "$PWD/dsh-floating-maid"
 ```
 
-> 走 GitHub 源安装时，`installBundle` 会先用 `git ls-remote` 检查仓库可达性（默认 5 秒超时）。国内网络若拉不动 GitHub，改用方式一或配好 Git 代理。
+`scripts/build.sh` 会自动探测 DSH 布局（源码 checkout 或已安装包）并链接依赖，无需手工准备 `node_modules`。
+
+> 也可以只用源码跑构建、不走 `dsh plugin`：构建完成后 `lib/` 就位，用 `dsh plugin --profile web add <绝对路径>` 安装即可。
 
 ### 方式三：桌面独立版（Windows，免安装）
 
