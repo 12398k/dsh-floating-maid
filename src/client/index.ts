@@ -847,10 +847,9 @@ function useSmoothStream(targetText: string, isSummary: boolean): string {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   /** 不足一字的余量累积，让小数速率也能稳定推进 */
   const carryRef = useRef(0)
-  /** 块间隔估计（毫秒），EMA 自适应推送节奏 */
-  const intervalRef = useRef(2500)
+  /** 到达速率估计（字符/毫秒），EMA 自适应推送节奏 */
+  const arrivalRateRef = useRef(30 / 1000)
   const lastArrivalRef = useRef(Date.now())
-  const lastBlockAtRef = useRef(Date.now())
   const lastTargetLenRef = useRef(targetText.length)
 
   targetRef.current = targetText
@@ -878,12 +877,16 @@ function useSmoothStream(targetText: string, isSummary: boolean): string {
       return
     }
 
-    // 有新内容到达：更新块间隔估计
+    // 有新内容到达：估计到达速率（字符/毫秒）。
+    // 门槛从 200ms 放宽到 30ms —— 高频推送时 gap 很小，旧门槛会让估计永远停在初值。
     if (targetLen > lastTargetLenRef.current) {
       const gap = now - lastArrivalRef.current
-      if (gap > 200 && gap < 60000) intervalRef.current = intervalRef.current * 0.6 + gap * 0.4
+      const added = targetLen - lastTargetLenRef.current
+      if (gap >= 30 && gap < 60000) {
+        const inst = added / gap
+        arrivalRateRef.current = arrivalRateRef.current * 0.6 + Math.min(2, Math.max(1 / 1000, inst)) * 0.4
+      }
       lastArrivalRef.current = now
-      lastBlockAtRef.current = now
       lastTargetLenRef.current = targetLen
     } else if (targetLen <= shownLenRef.current) {
       return
@@ -896,11 +899,20 @@ function useSmoothStream(targetText: string, isSummary: boolean): string {
       const pending = full.length - cur
       if (pending <= 0) { timerRef.current = null; carryRef.current = 0; return }
 
-      // JIT：把剩余字数摊到「距下次预计到达」的时间上
-      const sinceLast = Date.now() - lastBlockAtRef.current
-      const timeLeft = Math.max(300, intervalRef.current - sinceLast)
-      let speed = pending / timeLeft
-      speed = Math.min(1 / 1.5, Math.max(1 / 400, speed))
+      // 配速 = 到达速率与「人类可读下限」的较大者。
+      //
+      // 早先的 JIT 是「把剩余字数摊到下次到达之前」，但慢速场景会崩：
+      // 每 2.5 秒只来 5 个字时，摊平后每 480ms 才吐 1 字 —— 看着就是卡死
+      // （单元测试实测：间隔均值 493ms、最大 912ms、卡顿 59 次）。
+      //
+      // 正确做法是给一个**最小流动速率**：文本再少也保持连贯吐字，
+      // 这样视觉上永远是「在流动」，而不是「挤牙膏」。
+      const MIN_CPS = 22          // 字/秒，人类舒适阅读下限
+      const MAX_CPS = 400         // 字/秒，再快就成暴吐
+      let speed = arrivalRateRef.current
+      if (pending > 200) speed = Math.max(speed, 120 / 1000)   // 积压多：至少 120 字/秒追
+      speed = Math.max(speed, MIN_CPS / 1000)
+      speed = Math.min(speed, MAX_CPS / 1000)
 
       carryRef.current += speed * FRAME
       const emit = Math.floor(carryRef.current)
@@ -922,6 +934,89 @@ function useSmoothStream(targetText: string, isSummary: boolean): string {
 
   return isSummary ? targetText : displayedText
 }
+
+/**
+ * 状态行（ticker）——把「每帧变化的平滑文本 + 跑马灯」关进独立组件。
+ *
+ * 为什么必须隔离：`useSmoothStream` 每 16ms 更新一次文本。它原先跑在
+ * MaidOverlay 内部，于是每帧都触发**整棵树（168 节点、5000 行、零 memo）重 diff**；
+ * 配套的 useLayoutEffect 每帧读 scrollWidth 还会**强制同步布局**。两者叠加
+ * 就是体感上的卡顿。
+ *
+ * 隔离后：MaidOverlay 只在状态真正变化时渲染（约 2.5 秒一次，随 SSE 到达），
+ * 每帧的重渲染只发生在这个子组件里。React.memo + 基本类型 props 保证
+ * 父级重渲染不会连带刷新它。
+ *
+ * 滚动也改为直写 DOM：不再 setState 位移量（那会再次触发渲染），
+ * 而是量一次溢出宽度后直接写 style.transform。
+ */
+const StatusTicker = React.memo(function StatusTicker(props: {
+  /** 思维链原文（流式）或摘要 */
+  thinking: string
+  isSummary: boolean
+  /** 非 thinking 态的最终文案 */
+  staticText: string
+  /** 是否流式态（决定要不要平滑 + 跑马灯） */
+  streaming: boolean
+  phase: string
+  /** 外层容器类名（含相位配色 / 渐隐 / swap 动画） */
+  wrapClass: string
+}): React.ReactElement {
+  const smoothed = useSmoothStream(props.thinking, props.isSummary)
+  const innerRef = useRef<HTMLSpanElement | null>(null)
+  const boxRef = useRef<HTMLDivElement | null>(null)
+
+  const text = props.streaming
+    ? (smoothed ? `思考中: ${smoothed}` : '正在深层思考…')
+    : props.staticText
+
+  // 溢出测量 + 直写 transform。
+  //
+  // 依赖里用 text.length 而非 text：text 每帧都变，若依赖它就会每帧读
+  // scrollWidth（强制同步重排）。长度每变一次才量一次，频率降低两个数量级；
+  // 而位移量本身由 CSS transition 平滑跟上，视觉上仍是连续滚动。
+  const textLen = text.length
+  useLayoutEffect(() => {
+    const inner = innerRef.current
+    const box = boxRef.current
+    if (!inner || !box) return
+
+    // 渐隐类：两套命名（aether / maid）都要挂——wrapClass 的两种前缀各用其一，
+    // 同特异性下后定义的规则生效，视觉一致。
+    const FADE_R = ['dsh-fade-right', 'dsh-maid-bubble__status--fade-right']
+    const FADE_B = ['dsh-fade-both', 'dsh-maid-bubble__status--fade-both']
+    const clearFade = (): void => { box.classList.remove(...FADE_R, ...FADE_B) }
+
+    const over = inner.scrollWidth - box.clientWidth
+    const overflowing = over > 4
+
+    if (overflowing && props.streaming && !props.isSummary) {
+      // 流式长文本：双向跑马灯，两端渐隐
+      box.classList.remove(...FADE_R)
+      box.classList.add(...FADE_B)
+      inner.classList.add('dsh-maid-bubble__ticker--live')
+      inner.style.transform = `translateX(${-over}px)`
+    } else if (overflowing) {
+      // 静态长文本：不滚动，只右端渐隐
+      box.classList.remove(...FADE_B)
+      box.classList.add(...FADE_R)
+      inner.classList.remove('dsh-maid-bubble__ticker--live')
+      inner.style.transform = 'translateX(0px)'
+    } else {
+      clearFade()
+      inner.classList.remove('dsh-maid-bubble__ticker--live')
+      inner.style.transform = 'translateX(0px)'
+    }
+  }, [textLen, props.streaming, props.isSummary])
+
+  return React.createElement('div', {
+    className: props.wrapClass,
+    ref: boxRef,
+  }, React.createElement('span', {
+    className: 'dsh-maid-bubble__ticker',
+    ref: innerRef,
+  }, text))
+})
 
 // ───────── CSS 样式体系 ─────────
 const CSS = `
@@ -3876,17 +3971,17 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
   const currentDisplayThinking = selectedAgentId === 'main' ? thinking : (currentAgent.thinking || '')
 
   // 思考与状态解析
-  const tickerRef = useRef<HTMLSpanElement | null>(null)
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const [tickerShift, setTickerShift] = React.useState(0)
-  const [fadeMode, setFadeMode] = React.useState<'none' | 'right' | 'both'>('none')
-
+  //
+  // 注意：这里**不做**平滑、也不测量宽度。
+  // 平滑（每 16ms 变一次）与宽度测量（每帧读 scrollWidth，强制同步重排）
+  // 都会让这个 168 节点的组件每帧全量重渲染——那是卡顿的根源。
+  // 两者都下沉到 StatusTicker 子组件里，父组件只在状态真正变化时渲染。
   const thinkingParsed = parseThinking(currentDisplayThinking)
-  const smoothedThinking = useSmoothStream(thinkingParsed.text, thinkingParsed.isSummary)
+  const isStreamingThinking = currentDisplayPhase === 'thinking' && !thinkingParsed.isSummary
 
   let finalStatusText = ''
   if (currentDisplayPhase === 'thinking') {
-    finalStatusText = smoothedThinking ? `思考中: ${smoothedThinking}` : '正在深层思考…'
+    finalStatusText = thinkingParsed.text ? `思考中: ${thinkingParsed.text}` : '正在深层思考…'
   } else if (currentDisplayPhase === 'tool') {
     finalStatusText = currentDisplayLine || (tool ? `正在${tool}…` : '操作执行中…')
   } else if (currentDisplayPhase === 'review') {
@@ -3901,29 +3996,11 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     finalStatusText = (!currentDisplayLine || currentDisplayLine === '就绪') ? '有活儿随时叫我～' : currentDisplayLine
   }
 
-  useLayoutEffect(() => {
-    if (!tickerRef.current || !containerRef.current) return
-    const innerW = tickerRef.current.scrollWidth
-    const outerW = containerRef.current.clientWidth
-    if (innerW > outerW + 2) {
-      if (currentDisplayPhase === 'thinking' && !thinkingParsed.isSummary) {
-        setTickerShift(-(innerW - outerW))
-        setFadeMode('both')
-      } else {
-        setTickerShift(0)
-        setFadeMode('right')
-      }
-    } else {
-      setTickerShift(0)
-      setFadeMode('none')
-    }
-  }, [finalStatusText, currentDisplayPhase, smoothedThinking])
-
   const meta = PHASE_DICT[currentDisplayPhase] || PHASE_DICT.idle
   const h = React.createElement
 
-  const aetherFadeClass = fadeMode === 'right' ? ' dsh-fade-right' : (fadeMode === 'both' ? ' dsh-fade-both' : '')
-  const bubbleFadeClass = fadeMode === 'right' ? ' dsh-maid-bubble__status--fade-right' : (fadeMode === 'both' ? ' dsh-maid-bubble__status--fade-both' : '')
+  // 渐隐类已移除：文字溢出与否由 StatusTicker 内部量一次后决定，
+  // 父组件不再持有 fadeMode 状态（那会引入每帧重渲染）。
 
   // 渲染纯矢量时间轴 (含用户多模态输入行 + 专属工具图标 + 耗时 + 失败红叉)
   const renderTimeline = () => {
@@ -4570,15 +4647,15 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
                 h('span', { className: 'dsh-aether-pill__dot', style: { background: meta.dot } }),
                 meta.text
               ),
-              h('div', {
+              h(StatusTicker, {
                 key: 'istat-' + currentDisplayPhase,
-                className: `dsh-aether-ticker-box dsh-maid-bubble__status--${currentDisplayPhase}${aetherFadeClass} dsh-maid-status-swap`,
-              },
-                h('span', {
-                  className: `dsh-maid-bubble__ticker${tickerShift !== 0 ? ' dsh-maid-bubble__ticker--live' : ''}`,
-                  style: { transform: `translateX(${tickerShift}px)` },
-                }, finalStatusText)
-              )
+                thinking: thinkingParsed.text,
+                isSummary: thinkingParsed.isSummary,
+                staticText: finalStatusText,
+                streaming: isStreamingThinking,
+                phase: currentDisplayPhase,
+                wrapClass: `dsh-aether-ticker-box dsh-maid-bubble__status--${currentDisplayPhase} dsh-maid-status-swap`,
+              })
             )
           ),
 
@@ -4693,16 +4770,14 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
                 h('span', { className: 'dsh-aether-pill__dot', style: { background: meta.dot } }),
                 meta.text
               ),
-              h('div', {
-                className: `dsh-aether-ticker-box dsh-maid-bubble__status--${currentDisplayPhase}${aetherFadeClass}`,
-                ref: containerRef,
-              },
-                h('span', {
-                  className: `dsh-maid-bubble__ticker${tickerShift !== 0 ? ' dsh-maid-bubble__ticker--live' : ''}`,
-                  ref: tickerRef,
-                  style: { transform: `translateX(${tickerShift}px)` },
-                }, finalStatusText)
-              )
+              h(StatusTicker, {
+                thinking: thinkingParsed.text,
+                isSummary: thinkingParsed.isSummary,
+                staticText: finalStatusText,
+                streaming: isStreamingThinking,
+                phase: currentDisplayPhase,
+                wrapClass: `dsh-aether-ticker-box dsh-maid-bubble__status--${currentDisplayPhase}`,
+              })
             )
           ),
 
@@ -4720,7 +4795,7 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
     // ═══════════════════════════════════════════════════════════
     // 2. 普通网页右下角模式 (isPiP = false) + 全功能移动端抽屉
     // ═══════════════════════════════════════════════════════════
-    const statusClass = `dsh-maid-bubble__status dsh-maid-bubble__status--${phase}${bubbleFadeClass}`
+    const statusClass = `dsh-maid-bubble__status dsh-maid-bubble__status--${phase}`
     const widgetStyle = { right: pos.right + 'px', bottom: pos.bottom + 'px' } as React.CSSProperties
     const pipBtnClass = `dsh-maid-bubble__btn${pipActive ? ' dsh-maid-bubble__btn--pip-active' : ''}`
     const isDockLeft = typeof window !== 'undefined' && pos.right > (window.innerWidth / 2)
@@ -4743,17 +4818,15 @@ const MaidOverlay: React.FC<MaidOverlayProps> = ({ isPiP = false }): React.React
             ),
             h('span', { className: 'dsh-maid-bubble__title-text', title: promptTitle }, promptTitle)
           ),
-          h('div', {
+          h(StatusTicker, {
             key: 'mstat-' + phase,
-            className: statusClass + ' dsh-maid-status-swap',
-            ref: containerRef,
-          },
-            h('span', {
-              className: `dsh-maid-bubble__ticker${tickerShift !== 0 ? ' dsh-maid-bubble__ticker--live' : ''}`,
-              ref: tickerRef,
-              style: { transform: `translateX(${tickerShift}px)` },
-            }, finalStatusText)
-          ),
+            thinking: thinkingParsed.text,
+            isSummary: thinkingParsed.isSummary,
+            staticText: finalStatusText,
+            streaming: isStreamingThinking,
+            phase: currentDisplayPhase,
+            wrapClass: statusClass + ' dsh-maid-status-swap',
+          }),
           h('div', { className: 'dsh-maid-bubble__actions' },
             h('button', {
               className: 'dsh-maid-bubble__btn',
