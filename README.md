@@ -468,6 +468,26 @@ dsh plugin --profile web add "$PWD/dsh-floating-maid"
 
 到 [Releases](https://github.com/12398k/dsh-floating-maid/releases) 下载 `whale-girl-pet-win-x64.zip`，解压后双击 `鲸鱼娘桌宠.exe` 即可。详见 release 说明。
 
+#### 桌面版怎么联动本插件
+
+桌面版保留了她本人与全部互动，但**工作状态来自本插件的 `/api/maid/state`**。连上后她会跟着真实进度做表情、显状态气泡（含思维链）。
+
+托盘图标 → 「编辑配置文件（DSH 地址等）」，改 `dshUrl` 后保存即生效：
+
+```json
+{
+  "dshLink": true,
+  "dshUrl": "http://192.168.50.24:3084"
+}
+```
+
+要点：
+
+- **`dshUrl` 填运行 DSH 的那台机器**的地址。填 `127.0.0.1` 只在桌宠与 DSH 同机时有效。
+- 若 DSH 只监听回环（默认如此），用本插件设置页的「**局域网访问**」开一个入口，把那里给出的地址填进去。
+- **`dshToken` 留空即可**——`/api/maid/state` 端点不要求鉴权，填了也不会被采纳（该端点不认 `Authorization` 头）。
+- 配置文件位置：`%APPDATA%\鲸鱼娘桌宠\pet-state.json`（托盘菜单可直接打开）。
+
 ### 装完之后
 
 1. 打开 DSH Web GUI（默认 `http://127.0.0.1:3080`），右下角会出现她。
