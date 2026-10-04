@@ -28,6 +28,12 @@ export interface LanAccessConfig {
   port: number
   /** 监听地址，固定 0.0.0.0（要对外就必须全网卡） */
   host: string
+  /**
+   * 路径前缀白名单。只有命中这些前缀的请求才会被转发给 DSH，
+   * 其余一律 403——避免这个对外端口变成「整台 DSH 的后门」。
+   * 默认只放行本插件自己的 `/api/maid/`。
+   */
+  allowedPaths: string[]
 }
 
 export interface LanStatus {
@@ -42,16 +48,26 @@ export interface LanStatus {
   tokenAvailable: boolean
   /** 局域网可访问地址（仅 IPv4 私网） */
   addresses: string[]
-  /** 免 token 的入口（打开后会要求 DSH 鉴权） */
+  /** 插件自身的局域网入口（本反代自己渲染的状态页） */
   urls: string[]
-  /** 带 token 的一次性入口，点开即进入 DSH */
+  /** 带 token 的入口；仅当白名单放行了 DSH 主界面时才有意义 */
   authenticatedUrls: string[]
   /** 上游 DSH 是否只绑了回环——是则局域网必须靠本反代 */
   upstreamLoopbackOnly: boolean
+  /** 当前生效的路径白名单 */
+  allowedPaths: string[]
+  /** 白名单是否放行了 DSH 主界面（放行即等于把整台 DSH 暴露出去） */
+  exposesDsh: boolean
   error?: string
 }
 
 const DEFAULT_PORT = 3084
+
+/** 默认白名单：只放行本插件自己的 API 与静态资源 */
+const DEFAULT_ALLOWED_PATHS = ['/api/maid/']
+
+/** 本插件静态资源的后缀，用于判断「插件自己的东西」 */
+const PLUGIN_PATH_PREFIX = '/api/maid/'
 
 /**
  * 判断网卡是否是「用户真实局域网」而非虚拟网桥。
@@ -79,7 +95,12 @@ function isPrivateLanIpv4(ip: string): boolean {
 }
 
 export class LanAccessManager {
-  private config: LanAccessConfig = { enabled: false, port: DEFAULT_PORT, host: '0.0.0.0' }
+  private config: LanAccessConfig = {
+    enabled: false,
+    port: DEFAULT_PORT,
+    host: '0.0.0.0',
+    allowedPaths: [...DEFAULT_ALLOWED_PATHS],
+  }
   private server: ReturnType<typeof createServer> | null = null
   private listening = false
   private lastError: string | undefined
@@ -121,6 +142,47 @@ export class LanAccessManager {
       }
     } catch { /* ignore */ }
     return out
+  }
+
+  getAllowedPaths(): string[] {
+    return [...this.config.allowedPaths]
+  }
+
+  /**
+   * 设置路径白名单。传空数组会回落到默认（只放行本插件），
+   * 避免误操作把整台 DSH 暴露出去。
+   */
+  setAllowedPaths(paths: string[]): string[] {
+    const cleaned = (Array.isArray(paths) ? paths : [])
+      .map((p) => String(p || '').trim())
+      .filter((p) => p.startsWith('/'))
+      .map((p) => (p.endsWith('/') ? p : p + '/'))
+    this.config.allowedPaths = cleaned.length > 0 ? [...new Set(cleaned)] : [...DEFAULT_ALLOWED_PATHS]
+    return this.getAllowedPaths()
+  }
+
+  /**
+   * 判断请求路径是否在白名单内。
+   *
+   * 用「前缀 + 边界」比较而非裸 startsWith：白名单 `/api/maid/` 不该放行
+   * `/api/maid-evil`。另外插件自己的静态资源端点（如 `/api/maid/state`）天然
+   * 落在前缀内，无需额外规则。
+   */
+  private isAllowedPath(rawUrl: string): boolean {
+    let pathname = rawUrl
+    try {
+      pathname = new URL(rawUrl, 'http://placeholder.invalid').pathname
+    } catch { /* 非法 URL 一律不放行 */ return false }
+    for (const prefix of this.config.allowedPaths) {
+      if (pathname === prefix.slice(0, -1)) return true // 前缀去掉尾斜杠后完全相等
+      if (pathname.startsWith(prefix)) return true
+    }
+    return false
+  }
+
+  /** 白名单是否放行了 DSH 主界面（等于把整台 DSH 暴露出去） */
+  private exposesDsh(): boolean {
+    return this.config.allowedPaths.some((p) => p === '/' || p === '/*/' || !p.startsWith(PLUGIN_PATH_PREFIX))
   }
 
   /**
@@ -261,6 +323,7 @@ export class LanAccessManager {
     // listen() 是异步的，回调前 this.listening 还是 false；用 server.listening 实时判断，
     // 否则刚点「开启」立刻回读会显示未监听。
     const listening = !!this.server?.listening
+    const exposes = this.exposesDsh()
     return {
       enabled: this.config.enabled,
       listening,
@@ -269,9 +332,13 @@ export class LanAccessManager {
       dshPort: this.dshPort,
       tokenAvailable: !!token,
       addresses: addrs,
+      // 默认入口是本反代自己的状态页，不是 DSH 主界面
       urls: addrs.map((a) => `http://${a}:${port}/`),
-      authenticatedUrls: token ? addrs.map((a) => `http://${a}:${port}/?token=${token}`) : [],
+      // 只有白名单放行了 DSH 主界面时，这些带 token 的链接才有意义
+      authenticatedUrls: exposes && token ? addrs.map((a) => `http://${a}:${port}/?token=${token}`) : [],
       upstreamLoopbackOnly: this.upstreamLoopbackOnly(),
+      allowedPaths: this.getAllowedPaths(),
+      exposesDsh: exposes,
       error: this.lastError,
     }
   }
@@ -312,12 +379,45 @@ export class LanAccessManager {
   }
 
   private handle(req: IncomingMessage, res: ServerResponse): void {
+    const rawUrl = req.url || '/'
+    let pathname = rawUrl
+    try { pathname = new URL(rawUrl, 'http://placeholder.invalid').pathname } catch { /* 保底用原串 */ }
+
     // 自检端点：不代理，直接答
-    if (req.url === '/__maid-lan/status') {
+    if (pathname === '/__maid-lan/status') {
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
       res.end(JSON.stringify(this.status(), null, 2))
       return
     }
+
+    // 根路径：渲染本插件自己的落地页，绝不把 DSH 主界面端出去
+    if (pathname === '/' || pathname === '/index.html') {
+      const body = this.renderLandingPage()
+      res.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+      })
+      res.end(body)
+      return
+    }
+
+    // 白名单外一律 403——这个端口只服务于插件自身，不是 DSH 的后门
+    if (!this.isAllowedPath(rawUrl)) {
+      res.writeHead(403, {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+      })
+      res.end(JSON.stringify({
+        ok: false,
+        error: 'forbidden',
+        message: '此端口只允许访问 maid 插件自己的接口（/api/maid/*）。',
+        allowedPaths: this.getAllowedPaths(),
+      }, null, 2))
+      return
+    }
+
     // 原样透传 Host：DSH 的 cookie 与 authority 绑定，改写就失效
     const headers = { ...req.headers }
     const pr = httpRequest({
@@ -339,7 +439,51 @@ export class LanAccessManager {
     req.pipe(pr)
   }
 
+  /** 落地页：说明这个端口能干什么、不能干什么 */
+  private renderLandingPage(): string {
+    const s = this.status()
+    const esc = (v: string): string => v.replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+    ))
+    const rows = s.allowedPaths.map((p) => `<li><code>${esc(p)}*</code></li>`).join('')
+    return `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>maid 局域网接入</title>
+<style>
+ body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+      background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827}
+ .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:26px 24px;
+       max-width:520px;width:calc(100% - 40px)}
+ h1{font-size:16px;margin:0 0 12px}
+ p{font-size:13px;color:#6b7280;margin:0 0 10px;line-height:1.7}
+ code{background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:12px}
+ ul{margin:6px 0 12px;padding-left:20px}
+ li{font-size:12px;color:#6b7280;line-height:1.9}
+ .ok{color:#22a06b}
+ .warn{color:#d98b0c}
+</style></head><body><div class="card">
+<h1>🐋 maid 局域网接入</h1>
+<p>这个端口<strong>只服务于 maid 插件自身</strong>，不是 DSH 的后门。</p>
+<p>允许访问的路径：</p>
+<ul>${rows}</ul>
+<p>其余请求一律 <code>403</code>，包括 DSH 的主界面与其它插件。</p>
+<p class="${s.exposesDsh ? 'warn' : 'ok'}">${
+      s.exposesDsh
+        ? '⚠️ 当前白名单放行了 DSH 主界面——等于把整台 DSH 暴露给局域网。'
+        : '✅ 已限制为仅插件自身路径。'
+    }</p>
+<p>要打开完整的 DSH，请在本机访问 <code>${esc(s.upstream)}</code>，或用你自己的反向代理。</p>
+<p style="color:#9ca3af;font-size:12px">状态：${s.listening ? '监听中' : '未监听'} · 端口 ${s.port} · 上游 ${esc(s.upstream)}</p>
+</div></body></html>`
+  }
+
   private handleUpgrade(req: IncomingMessage, socket: Socket, head: Buffer): void {
+    // 白名单外的升级请求同样拒绝，避免绕过 HTTP 层的限制
+    if (!this.isAllowedPath(req.url || '/')) {
+      socket.destroy()
+      return
+    }
     const up = netConnect(this.dshPort, '127.0.0.1', () => {
       let raw = `${req.method} ${req.url} HTTP/1.1\r\n`
       for (const [k, v] of Object.entries(req.headers)) raw += `${k}: ${v}\r\n`

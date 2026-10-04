@@ -26,6 +26,8 @@ interface LanStatus {
   urls: string[]
   authenticatedUrls: string[]
   upstreamLoopbackOnly: boolean
+  allowedPaths: string[]
+  exposesDsh: boolean
   error?: string
 }
 
@@ -113,6 +115,27 @@ export function LanAccessSettingsSection(): React.ReactElement {
     }
   }, [])
 
+  /** 切换访问范围：false = 仅插件自身；true = 放行整个 DSH */
+  const applyScope = React.useCallback(async (exposeDsh: boolean) => {
+    setLoading(true)
+    setMsg(null)
+    try {
+      const r = await fetch('/api/maid/lan/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exposeDsh }),
+      })
+      const j = await r.json()
+      if (!j?.ok) throw new Error(j?.error || '操作失败')
+      setStatus(j as LanStatus)
+      setMsg({ text: exposeDsh ? '已放行整个 DSH' : '已限制为仅插件自身路径', type: 'ok' })
+    } catch (err: any) {
+      setMsg({ text: String(err?.message || err), type: 'err' })
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   const on = !!status?.listening
   const addrs = status?.addresses || []
   const tokenUrls = status?.authenticatedUrls || []
@@ -178,7 +201,9 @@ export function LanAccessSettingsSection(): React.ReactElement {
     addrs.length > 0
       ? h('div', { style: card },
           h('div', { style: { fontSize: 13, fontWeight: 600, marginBottom: 8 } }, '访问地址'),
-          h('div', { style: hint }, '把下面任一地址发给同局域网的设备打开即可。'),
+          h('div', { style: hint },
+            '这个端口只服务于 maid 插件自身——打开是插件的落地页，不是 DSH 主界面。',
+          ),
           ...addrs.map((a, i) => h('div', { key: a, style: { ...row, marginTop: 10 } },
             h('code', { style: mono }, status?.urls[i] || `http://${a}:${status?.port}/`),
             h('button', { style: btn, onClick: () => void copy(status?.urls[i] || '') }, '复制'),
@@ -190,31 +215,63 @@ export function LanAccessSettingsSection(): React.ReactElement {
           ),
         ),
 
-    // 带 token 的免登录入口
+    // 访问范围（白名单）
     h('div', { style: card },
-      h('div', { style: { fontSize: 13, fontWeight: 600, marginBottom: 8 } }, '免登录入口（含 token）'),
-      status?.tokenAvailable
-        ? h(React.Fragment, null,
-            h('div', { style: hint },
-              '这些链接里带了本次 DSH 进程的启动 token，点开即可直接进入，不用再手动授权。',
-              h('br'),
-              '⚠️ token 等同于访问凭证，且每次重启 DSH 都会变——只发给你信任的设备。',
-            ),
-            ...tokenUrls.map((u, i) => h('div', { key: u, style: { ...row, marginTop: 10 } },
-              h('code', { style: mono }, u.length > 96 ? u.slice(0, 96) + '…' : u),
-              h('button', { style: btn, onClick: () => void copy(u) }, '复制'),
-              h('button', {
-                style: btn,
-                onClick: () => window.open(u, '_blank', 'noopener'),
-              }, '打开'),
-            )),
-          )
-        : h('div', { style: hint },
-            '尚未取到本次进程的启动 token。',
-            h('br'),
-            'token 由 DSH 启动时随机生成并打印在启动日志里，本插件从日志读取；若刚重启过，点上面的「刷新」重试。',
-          ),
+      h('div', { style: { fontSize: 13, fontWeight: 600, marginBottom: 8 } }, '访问范围'),
+      h('div', {
+        style: {
+          ...hint,
+          color: status?.exposesDsh ? '#d98b0c' : '#22a06b',
+          marginBottom: 8,
+        },
+      }, status?.exposesDsh
+        ? '⚠️ 当前放行了 DSH 主界面——等于把整台 DSH 暴露给局域网。'
+        : '✅ 已限制为仅插件自身路径，DSH 主界面与其它插件一律 403。'),
+      h('div', { style: hint }, '允许的路径前缀：'),
+      ...(status?.allowedPaths || []).map((p) => h('div', { key: p, style: { ...row, marginTop: 6 } },
+        h('code', { style: mono }, p + '*'),
+      )),
+      h('div', { style: { ...row, marginTop: 12 } },
+        h('button', {
+          style: btn,
+          disabled: loading,
+          onClick: () => void applyScope(false),
+        }, '仅插件自身（推荐）'),
+        h('button', {
+          style: btn,
+          disabled: loading,
+          onClick: () => void applyScope(true),
+        }, '放行整个 DSH'),
+      ),
     ),
+
+    // 带 token 的免登录入口（仅在放行 DSH 主界面时才有意义）
+    status?.exposesDsh
+      ? h('div', { style: card },
+          h('div', { style: { fontSize: 13, fontWeight: 600, marginBottom: 8 } }, '免登录入口（含 token）'),
+          status?.tokenAvailable
+            ? h(React.Fragment, null,
+                h('div', { style: hint },
+                  '这些链接里带了本次 DSH 进程的启动 token，点开即可直接进入，不用再手动授权。',
+                  h('br'),
+                  '⚠️ token 等同于访问凭证，且每次重启 DSH 都会变——只发给你信任的设备。',
+                ),
+                ...tokenUrls.map((u) => h('div', { key: u, style: { ...row, marginTop: 10 } },
+                  h('code', { style: mono }, u.length > 96 ? u.slice(0, 96) + '…' : u),
+                  h('button', { style: btn, onClick: () => void copy(u) }, '复制'),
+                  h('button', {
+                    style: btn,
+                    onClick: () => window.open(u, '_blank', 'noopener'),
+                  }, '打开'),
+                )),
+              )
+            : h('div', { style: hint },
+                '尚未取到本次进程的启动 token。',
+                h('br'),
+                'token 由 DSH 启动时随机生成并打印在启动日志里，本插件从日志读取；若刚重启过，点上面的「刷新」重试。',
+              ),
+        )
+      : null,
 
     msg
       ? h('div', {

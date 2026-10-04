@@ -2332,6 +2332,15 @@ export function apply(ctx: Ctx): void {
       try {
         const body = JSON.parse((await readBody(req)) || '{}')
         if (body.port !== undefined) lanManager.setPort(body.port)
+        // 白名单：默认只放行插件自身；显式传 exposeDsh=true 才放行 DSH 主界面
+        if (body.exposeDsh === true) {
+          lanManager.setAllowedPaths(['/'])
+        } else if (body.exposeDsh === false) {
+          lanManager.setAllowedPaths([])   // 空数组回落到默认（仅插件自身）
+        }
+        if (Array.isArray(body.allowedPaths)) {
+          lanManager.setAllowedPaths(body.allowedPaths)
+        }
         if (body.enabled === true) {
           const r = lanManager.start()
           if (!r.ok) return json(res, 400, { ok: false, error: r.error })
