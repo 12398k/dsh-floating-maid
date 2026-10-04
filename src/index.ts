@@ -247,6 +247,34 @@ function isToolError(data: any): boolean {
   return false
 }
 
+/**
+ * 思维链采集：把 `llm/stream` 产出的流「原样透传 + 顺手旁听」。
+ *
+ * 为什么必须走这里：`reasoning-delta` 是 **LLM 适配器实时产出的流式 chunk**，
+ * 它只在 `llm/stream` waterfall 里出现，**不写进会话日志**（实测会话 jsonl 里
+ * 0 条 chunk/delta 事件）。所以监听 `session/event` 永远拿不到思维链——
+ * 早期那版就是这么写的，结果 `state.thinking` 恒为空。
+ *
+ * 这是 waterfall：必须把流原样交还下游，只做旁听。任何消费/丢弃 chunk 的写法
+ * 都会掐断本次模型调用，所以这里逐块 yield，绝不过滤。
+ *
+ * @param source 下游适配器产出的 chunk 流
+ * @param onDelta 收到一段思维链文本的回调
+ */
+async function* tapReasoningStream(
+  source: AsyncIterable<any>,
+  onDelta: (text: string) => void,
+): AsyncIterable<any> {
+  for await (const chunk of source) {
+    try {
+      if (chunk && chunk.type === 'reasoning-delta' && typeof chunk.text === 'string' && chunk.text) {
+        onDelta(chunk.text)
+      }
+    } catch { /* 旁听失败绝不能影响主流程 */ }
+    yield chunk
+  }
+}
+
 function formatModelName(name?: string | null): string {
   if (!name) return 'Gemini 3.7 Flash'
   if (name.includes('/')) name = name.split('/').pop() || name
@@ -1086,6 +1114,8 @@ function updateTelemetry(session?: any): TelemetryMetrics {
 
 let isTurnActive: boolean = false
 let reasoningBuffer: string = ''
+/** 最近一次从 assistant/message.stream 提取到的思维链原文 */
+let lastReasoningText = ''
 let lastToolNoun: string = ''
 let justFinishedTool: boolean = false
 let recordedTitles = new Set<string>()
@@ -1662,6 +1692,7 @@ const projectEvent = (sessionId: string, event: any, sessionObj?: any): void => 
         }
 
         updateTelemetry(sessionObj)
+        // 思维链不走这里——它由 llm/stream waterfall 实时提供（见 apply 里的订阅）。
         setState({ phase: 'review', line: '整理回复中…', sessionId: sid, metrics: state.metrics })
       } else {
         targetAgent.phase = 'review'
@@ -1952,6 +1983,34 @@ export function apply(ctx: Ctx): void {
   const dEvent = ctx.on('session/event', (session: any, event: any) => {
     const sessionId = session?.id ?? session?.sessionId ?? 'global'
     projectEvent(String(sessionId), event, session)
+  })
+
+  // ───────── 思维链实时采集 ─────────
+  //
+  // reasoning-delta 只在 llm/stream waterfall 里出现（不落盘），这是唯一来源。
+  // 必须是 waterfall 形态：把流原样交还下游，只旁听。
+  let reasoningDeltaAt = 0
+  const dLlmStream = ctx.on('llm/stream', (options: any, next: any) => {
+    let stream: AsyncIterable<any>
+    try {
+      stream = next()
+    } catch (err) {
+      throw err
+    }
+    // 只关心主 Agent 的推理；子代理的思维链不进主时间轴
+    const sId = options?.sessionId ? String(options.sessionId) : ''
+    if (sId && isSessionSubagent(sId)) return stream
+
+    return tapReasoningStream(stream, (text) => {
+      reasoningBuffer += text
+      // 超出上限时保留尾部——客户端只渲染尾部窗口，尾部连续则裁剪不产生视觉跳变
+      if (reasoningBuffer.length > 8000) reasoningBuffer = reasoningBuffer.slice(-8000)
+      reasoningDeltaAt = Date.now()
+      // 思维链一到就切到 thinking 态——比等 step/start 更及时
+      if (!isTurnActive) isTurnActive = true
+      state.thinking = reasoningBuffer.replace(/\s+/g, ' ').trim()
+      setState({ phase: 'thinking', line: '正在思考…', thinking: state.thinking })
+    })
   })
 
   // 严格过滤：仅主 Agent（depth === 0 或无 parent）的人类输入才更新全局 state.userInput 与排队队列
@@ -2377,6 +2436,7 @@ export function apply(ctx: Ctx): void {
 
   ctx.effect(() => () => {
     dEvent?.()
+    dLlmStream?.()
     dInbox1?.()
     dInbox2?.()
     for (const client of sseClients) {
