@@ -306,6 +306,68 @@ __maidDebug.state()         // 打印当前状态
 | `/api/maid/webpush/test` | POST | 发一条测试推送 |
 | `/api/maid/webpush/clear` | POST | 清空全部订阅 |
 
+### 局域网访问
+
+| 路径 | 方法 | 用途 |
+|---|---|---|
+| `/api/maid/lan/status` | GET | 局域网接入状态：地址、端口、token 是否就绪、带 token 的入口 |
+| `/api/maid/lan/config` | POST | 开启/关闭局域网反代，body `{ enabled, port? }` |
+
+---
+
+## 局域网访问
+
+让同一局域网内的其他设备（手机 / 平板 / 另一台电脑）打开这台机器上的 DSH。
+
+### 为什么不能直接访问
+
+`dsh web` 默认只绑 `127.0.0.1`，且带**authority 绑定的会话鉴权**：
+
+- cookie 名是 `dsh-auth-<hash(authority)>`，签名载荷里也存了 authority；
+- authority 由请求的 `Host` 头算出。
+
+于是别的设备用 `http://<局域网IP>:3080` 访问会**永远停在 401**——即使端口对外可达，cookie 的 authority 也对不上。
+
+### 怎么解决
+
+设置页 → **局域网访问** → 开启。插件会在 host 端起一个反向代理：
+
+- 监听 `0.0.0.0:<port>`（默认 3084），转发到 `127.0.0.1:3080`；
+- **原样透传 `Host` 头**——这是关键，一旦改写 Host，DSH 下发的 cookie 立刻失效；
+- 转发 `Upgrade` 请求，DSH 的 RPC 与流式输出（`/api/remote.mux`）照常工作；
+- 自动取出本次 DSH 进程的 launch token，拼成可直接打开的免登录链接。
+
+页面上会给出：
+
+- **访问地址**：`http://<局域网IP>:<port>/`，发给同网设备打开（会要求 DSH 鉴权）；
+- **免登录入口**：`http://<局域网IP>:<port>/?token=...`，点开即进。
+
+> ⚠️ token 等同于访问凭证，且**每次重启 DSH 都会变**。只发给你信任的设备。
+
+### launch token 从哪来
+
+token 由 DSH 启动时随机生成（32 字节），只存在于进程内存，唯一的落地处是启动时打印的那行：
+
+```
+dsh web: http://127.0.0.1:3080/?token=<token>
+```
+
+所以插件只能从日志里读。按以下顺序找：
+
+1. `$DSH_LOG_FILE` 环境变量指向的文件；
+2. `$DSH_HOME/logs/dsh.log`、`$DSH_HOME/dsh.log`；
+3. `$HOME/.dsh/logs/dsh.log`；
+4. 从进程 cwd 逐级向上找 `logs/dsh.log`（systemd 部署的 `WorkingDirectory` 通常就是项目根，这一步多数情况直接命中）。
+
+> 日志里会累积历史启动的多条 token，**只有最后一条属于当前进程**——插件取的就是最后一条。
+> 若全部找不到，设置页会提示「尚未取到 token」，点「刷新」重试。
+
+### 与 DSH Pocket 的区别
+
+[DSH Pocket](https://github.com/shaobeichen/dsh-pocket) 也提供局域网访问，但它的代理**会把 Host 改写成 `127.0.0.1:3080`**（`loopbackAuthority()`，见其 `lib/proxy.mjs`）。这恰好触发了上面说的 authority 绑定问题——DSH 下发的 cookie 绑 `127.0.0.1:3080`，而浏览器地址栏是局域网 IP，cookie 名对不上，于是卡在「无法完成登录握手」页（实测返回 503）。
+
+本插件的反代**不改写 Host**，因此绕开了这个问题。两者可以共存，但一般没必要同时开。
+
 ---
 
 ## 持久化

@@ -22,6 +22,7 @@ import {
   type Manpu, type Patience, type Memory, type Activity,
 } from './persona.js'
 import { WebPushSettingsSection, IconBell } from './webpush.js'
+import { LanAccessSettingsSection } from './lan.js'
 
 const PLUGIN_ID = 'whale-girl-pet'
 
@@ -4950,5 +4951,16 @@ export function apply(ctx: any): void {
         label: '离线推送 (Web Push)',
       }, WebPushSettingsSection)
     ), 'maid: settings.section webpush')
+  } catch { /* ignore */ }
+
+  try {
+    ctx.effect(() => ctx.slots.inject('settings.section', () =>
+      ctx.slots.register({
+        name: 'settings.section',
+        id: 'floating-maid-lan',
+        order: 49,
+        label: '局域网访问',
+      }, LanAccessSettingsSection)
+    ), 'maid: settings.section lan')
   } catch { /* ignore */ }
 }

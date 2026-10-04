@@ -14,6 +14,7 @@ import { extname, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { pushManager, WebPushManager } from './push.js'
+import { lanManager } from './lan.js'
 
 type Ctx = any
 
@@ -2315,6 +2316,35 @@ export function apply(ctx: Ctx): void {
     },
   }
 
+  // ───────── 局域网接入 ─────────
+  const routeLanStatus = {
+    kind: 'exact' as const,
+    path: '/api/maid/lan/status',
+    handler: (_req: IncomingMessage, res: ServerResponse) => {
+      json(res, 200, { ok: true, ...lanManager.status() })
+    },
+  }
+
+  const routeLanConfig = {
+    kind: 'exact' as const,
+    path: '/api/maid/lan/config',
+    handler: async (req: IncomingMessage, res: ServerResponse) => {
+      try {
+        const body = JSON.parse((await readBody(req)) || '{}')
+        if (body.port !== undefined) lanManager.setPort(body.port)
+        if (body.enabled === true) {
+          const r = lanManager.start()
+          if (!r.ok) return json(res, 400, { ok: false, error: r.error })
+        } else if (body.enabled === false) {
+          lanManager.stop()
+        }
+        json(res, 200, { ok: true, ...lanManager.status() })
+      } catch (err: any) {
+        json(res, 400, { ok: false, error: String(err?.message || err) })
+      }
+    },
+  }
+
   const r0 = ctx.webServer.register(routeStream)
   const r1 = ctx.webServer.register(routeState)
   const r2 = ctx.webServer.register(routePat)
@@ -2333,6 +2363,8 @@ export function apply(ctx: Ctx): void {
   const rPushCfg = ctx.webServer.register(routePushConfig)
   const rPushTest = ctx.webServer.register(routePushTest)
   const rPushClr = ctx.webServer.register(routePushClear)
+  const rLanStatus = ctx.webServer.register(routeLanStatus)
+  const rLanCfg = ctx.webServer.register(routeLanConfig)
 
   ctx.effect(() => () => {
     dEvent?.()
@@ -2344,6 +2376,9 @@ export function apply(ctx: Ctx): void {
     sseClients.clear()
     r0?.(); r1?.(); r2?.(); r3?.(); r4?.(); r5?.(); r6?.(); r7?.(); r8?.(); r9?.()
     rSw?.(); rPushKey?.(); rPushStatus?.(); rPushSub?.(); rPushUnsub?.(); rPushCfg?.(); rPushTest?.(); rPushClr?.()
+    rLanStatus?.(); rLanCfg?.()
+    // 插件卸载时收掉局域网反代，不留孤儿监听
+    try { lanManager.stop() } catch { /* ignore */ }
   }, 'maid: host lifecycle dispose')
 
   void watchdog
